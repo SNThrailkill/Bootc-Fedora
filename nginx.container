@@ -1,0 +1,11 @@
+[Unit]
+Description=Run a nginx webserver
+
+[Container]
+Image=docker.io/library/nginx
+PublishPort=6443:6443
+AutoUpdate=registry
+Volume=/etc/nginx/nginx.conf:/etc/nginx/nginx.conf:z
+
+[Install]
+WantedBy=default.target
