@@ -2,7 +2,7 @@
 # an application container via https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html
 # that is also configured for automatic updates via
 # https://docs.podman.io/en/latest/markdown/podman-auto-update.1.html
-FROM quay.io/centos-bootc/centos-bootc:stream9
+FROM quay.io/fedora/fedora-bootc:40
 COPY nginx.container /usr/share/containers/systemd
 
 # Enable the simple "automatic update containers" timer, in the same way
