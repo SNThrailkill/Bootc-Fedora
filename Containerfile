@@ -10,7 +10,6 @@ COPY nginx.container /usr/share/containers/systemd
 RUN systemctl enable podman-auto-update.timer
 
 # Enable EPEL
-RUN dnf config-manager --set-enabled crb && dnf install epel-release epel-next-release -y
 RUN dnf install cloud-init distrobox qemu-guest-agent cockpit cockpit-bridge cockpit-composer cockpit-files cockpit-ostree cockpit-storaged cockpit-podman -y
 RUN dnf clean all
 
