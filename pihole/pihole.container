@@ -1,0 +1,22 @@
+[Unit]
+Description=Run a pihole instance
+
+[Container]
+Image=docker.io/pihole/pihole
+Label=app=pihole
+ContainerName=pihole
+HostName=pihole
+PublishPort=53:53/tcp
+PublishPort=53:53/udp
+PublishPort=80:80/tcp
+AutoUpdate=registry
+Network=pihole.network
+Volume=pihole.volume:/etc/pihole
+Volume=dnsmasq.volume:/etc/dnsmasq.d
+AddCapability=NET_ADMIN
+
+[Service]
+Restart=unless-stopped
+
+[Install]
+WantedBy=multi-user.target default.target

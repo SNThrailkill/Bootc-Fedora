@@ -1,0 +1,6 @@
+[Unit]
+Description=PiHole Container Network
+
+[Network]
+Label=app=pihole
+DisableDNS=true
