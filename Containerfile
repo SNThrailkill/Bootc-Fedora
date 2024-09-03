@@ -26,7 +26,6 @@ COPY nginx/* /usr/share/containers/systemd
 COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53
 RUN systemctl disable systemd-resolved.service
-RUN systemctl stop systemd-resolved
 
 FROM base AS k3s-agent
 # Enable ports necessary
