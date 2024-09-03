@@ -9,11 +9,14 @@ RUN systemctl enable bootc-fetch-apply-updates.timer
 
 # Install base packages
 RUN dnf install cloud-init distrobox qemu-guest-agent \
-    cockpit cockpit-bridge cockpit-files cockpit-ostree cockpit-storaged cockpit-podman \
+    cockpit-system cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman cockpit-pcp \
     nfs-utils libnfsidmap sssd-nfs-idmap \
     nmap \
     -y
 RUN dnf clean all
+
+# Install the Webserver as a container to get around https://github.com/containers/bootc/issues/571
+COPY cockpit/* /etc/containers/systemd
 
 # Enable Cockpit
 RUN systemctl enable cockpit.socket

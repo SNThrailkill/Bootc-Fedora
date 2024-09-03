@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Cockpit Webserver
+
+[Container]
+Image=quay.io/cockpit/ws
+PublishPort=9090:9090
+AutoUpdate=registry
+
+[Service]
+Restart=unless-stopped
+
+[Install]
+WantedBy=multi-user.target default.target
