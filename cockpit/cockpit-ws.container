@@ -5,6 +5,7 @@ Description=Run the Cockpit Webserver
 Image=quay.io/cockpit/ws
 PublishPort=9090:9090
 AutoUpdate=registry
+PodmanArgs=--privileged
 
 [Service]
 Restart=unless-stopped
