@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:40 as base
+FROM quay.io/fedora/fedora-bootc:40 AS base
 
 # Copy over the creds needed for future bootc updates
 COPY ./auth.json /etc/ostree/auth.json
