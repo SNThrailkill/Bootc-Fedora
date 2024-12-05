@@ -15,12 +15,6 @@ RUN dnf install cloud-init distrobox qemu-guest-agent \
     -y
 RUN dnf clean all
 
-# Install the Webserver as a container to get around https://github.com/containers/bootc/issues/571
-COPY cockpit/* /etc/containers/systemd
-
-# Enable Cockpit - comment out as quadlet version doesnt need
-# RUN systemctl enable cockpit.socket/
-
 # Nginx + Pihole as quadlets
 # Pihole has to run as rootful container so we copy it 
 # to the system folder instead of user like nginx
