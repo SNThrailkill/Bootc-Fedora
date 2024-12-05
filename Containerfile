@@ -9,7 +9,7 @@ RUN systemctl enable bootc-fetch-apply-updates.timer
 
 # Install base packages
 RUN dnf install cloud-init distrobox qemu-guest-agent \
-    cockpit-system cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman cockpit-pcp \
+    cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman cockpit-pcp \
     nfs-utils libnfsidmap sssd-nfs-idmap \
     nmap \
     -y
