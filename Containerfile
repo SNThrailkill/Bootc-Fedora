@@ -17,7 +17,7 @@ RUN dnf clean all
 
 
 # Enable Cockpit
-RUN systemctl enable cockpit.service
+RUN systemctl enable cockpit.service --now
 
 # Nginx + Pihole as quadlets
 # Pihole has to run as rootful container so we copy it 
