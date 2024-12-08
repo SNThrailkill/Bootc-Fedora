@@ -15,9 +15,8 @@ RUN dnf install --enablerepo=updates-testing cloud-init distrobox qemu-guest-age
     -y
 RUN dnf clean all
 
-
 # Enable Cockpit
-RUN systemctl enable cockpit.service --now
+RUN systemctl enable --now cockpit.service
 
 # Nginx + Pihole as quadlets
 # Pihole has to run as rootful container so we copy it 
