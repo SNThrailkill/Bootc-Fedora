@@ -22,7 +22,7 @@ COPY nginx/nginx.conf /etc/nginx
 # Pihole as a rootful quadlet
 # Pihole has to run as rootful container so we copy it 
 # to the system folder instead of user like nginx
-FROM base as pihole
+FROM base AS pihole
 COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service
