@@ -6,7 +6,6 @@ build-base:
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   script:
-    - cp ${REGISTRY_CONF} ./auth.json
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -f Containerfile --target base -t $IMAGE_TAG/base:latest .
     - docker push $IMAGE_TAG/base:latest
@@ -19,7 +18,6 @@ build-nginx:
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   script:
-    - cp ${REGISTRY_CONF} ./auth.json
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
     - docker push $IMAGE_TAG/nginx:latest
