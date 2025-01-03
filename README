@@ -6,10 +6,7 @@ variety of applications. The base images in this repo are based off the [Fedora 
 The `Containerfile` contains multiple stages that can be used to get exactly the software you need. See [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/) documentation for more information on how this works.
 
 ## Nginx
-This quadlet is preconfigured to pull in a preconfigured `/etc/nginx/nginx/conf` at the same path. It will not work until you add that file into your filesystem. 
+This quadlet is preconfigured to pull in a preconfigured `/etc/nginx/nginx.conf` at the same path. It will not work until you add that file into your filesystem. 
 
 ## Pihole
 This quadlet will work out of the box but because there's no way to include secrets as part of the quadlet definition you will have to `podman exec` into the pod and change the password manually by running `pihole -a -p` to set a password. This is a one time operation.
-
-## K3s
-WIP
