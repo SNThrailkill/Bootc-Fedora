@@ -16,7 +16,8 @@ RUN systemctl enable cockpit.socket
 
 # Nginx as quadlet
 FROM base AS nginx
-COPY nginx/* /usr/share/containers/systemd
+COPY nginx/nginx.container /usr/share/containers/systemd
+COPY nginx/nginx.conf /etc/nginx
 
 # Pihole as a rootful quadlet
 # Pihole has to run as rootful container so we copy it 
