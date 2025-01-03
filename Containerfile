@@ -14,11 +14,14 @@ RUN dnf clean all
 # Enable Cockpit
 RUN systemctl enable cockpit.socket
 
-# Nginx + Pihole as quadlets
-# Pihole has to run as rootful container so we copy it 
-# to the system folder instead of user like nginx
+# Nginx as quadlet
 FROM base AS nginx
 COPY nginx/* /usr/share/containers/systemd
+
+# Pihole as a rootful quadlet
+# Pihole has to run as rootful container so we copy it 
+# to the system folder instead of user like nginx
+FROM base as pihole
 COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service

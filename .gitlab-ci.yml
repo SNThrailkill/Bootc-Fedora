@@ -21,3 +21,15 @@ build-nginx:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
     - docker push $IMAGE_TAG/nginx:latest
+
+build-pihole:
+  image: docker:27
+  stage: build
+  services:
+    - docker:27-dind
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -f Containerfile --target pihole -t $IMAGE_TAG/pihole:latest .
+    - docker push $IMAGE_TAG/pihole:latest
