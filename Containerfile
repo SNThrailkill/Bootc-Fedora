@@ -19,15 +19,10 @@ RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master
 # Enable Cockpit
 RUN systemctl enable cockpit.socket
 
-# Nginx as quadlet
+# My personal LB & DNS
 FROM base AS nginx
 COPY nginx/nginx.container /usr/share/containers/systemd
 COPY nginx/nginx.conf /etc/nginx
-
-# Pihole as a rootful quadlet
-# Pihole has to run as rootful container so we copy it 
-# to the system folder instead of user like nginx
-FROM base AS pihole
 COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service
