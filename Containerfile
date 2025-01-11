@@ -1,4 +1,7 @@
-FROM quay.io/fedora/fedora-bootc:41 AS base
+FROM quay.io/fedora/fedora-bootc:41 AS base# Copy over the creds needed for future bootc updates
+
+# Copy over the creds needed for future bootc updates
+COPY ./auth.json /etc/ostree/auth.json
 
 # Enable the simple "automatic update containers" timer for both quadlets and os updates
 RUN systemctl enable podman-auto-update.timer
@@ -14,6 +17,7 @@ RUN dnf clean all
 
 # Change default shell to zsh
 RUN chsh -s $(which zsh)
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 # Enable Cockpit
 RUN systemctl enable cockpit.socket
