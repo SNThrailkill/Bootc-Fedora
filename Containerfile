@@ -15,9 +15,6 @@ RUN dnf install git cloud-init distrobox qemu-guest-agent \
     -y
 RUN dnf clean all
 
-# Change default shell to zsh
-RUN chsh -s $(which zsh)
-
 # Enable Cockpit
 RUN systemctl enable cockpit.socket
 
