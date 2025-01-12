@@ -17,7 +17,6 @@ RUN dnf clean all
 
 # Change default shell to zsh
 RUN chsh -s $(which zsh)
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 # Enable Cockpit
 RUN systemctl enable cockpit.socket
