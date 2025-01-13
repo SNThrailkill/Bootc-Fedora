@@ -13,7 +13,7 @@ variables:
     description: "The image type to build"
 
 
-.podman-login:
+.registry-login:
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
     - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -23,7 +23,7 @@ build-base:
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: .podman-login
+  extends: .registry-login
   script:
     - podman build -f Containerfile --target base -t $IMAGE_TAG/base:latest .
     - podman push $IMAGE_TAG/base:latest
@@ -33,7 +33,7 @@ build-nginx:
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: .podman-login
+  extends: .registry-login
   script:
     - podman build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
     - podman push $IMAGE_TAG/nginx:latest
@@ -41,14 +41,15 @@ build-nginx:
 build-image:
   image: quay.io/podman/stable
   stage: build
+  extends: .registry-login
   script:
-    - podman pull quay.io/fedora/fedora-bootc:41
+    - podman pull quay.io/centos-bootc/bootc-image-builder:latest
     - podman run --privileged --security-opt label=type:unconfined_t \
     - -v $(pwd)/output:/output \
     - -v /var/lib/containers/storage:/var/lib/containers/storage \
     - quay.io/centos-bootc/bootc-image-builder:latest \
     - --type $BUILD_TYPE \
-    - quay.io/fedora/fedora-bootc:41
+    - registry.gitlab.com/localthrailkill/bootc-fedora/base:latest
   rules:
     - if: $BUILD_TYPE != "none"
   artifacts:
