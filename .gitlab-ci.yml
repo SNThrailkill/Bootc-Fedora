@@ -13,7 +13,7 @@ variables:
     description: "The image type to build"
 
 
-podman-login:
+.podman-login:
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
     - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
@@ -25,7 +25,7 @@ build-base:
     - quay.io/podman/stable
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: podman-login
+  extends: .podman-login
   script:
     - podman build -f Containerfile --target base -t $IMAGE_TAG/base:latest .
     - podman push $IMAGE_TAG/base:latest
@@ -37,7 +37,7 @@ build-nginx:
     - quay.io/podman/stable
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: podman-login
+  extends: .podman-login
   script:
     - podman build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
     - podman push $IMAGE_TAG/nginx:latest
