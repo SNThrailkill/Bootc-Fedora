@@ -16,27 +16,27 @@ variables:
 .registry-login:
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 
 build-base:
-  image: docker:27
+  image: quay.io/podman/stable:latest
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   extends: .registry-login
   script:
-    - docker build -f Containerfile --target base -t $IMAGE_TAG/base:latest .
-    - docker push $IMAGE_TAG/base:latest
+    - podman build -f Containerfile --target base -t $IMAGE_TAG/base:latest .
+    - podman push $IMAGE_TAG/base:latest
 
 build-nginx:
-  image: docker:27
+  image: quay.io/podman/stable:latest
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   extends: .registry-login
   script:
-    - docker build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
-    - docker push $IMAGE_TAG/nginx:latest
+    - podman build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
+    - podman push $IMAGE_TAG/nginx:latest
 
 build-image:
   image: quay.io/podman/stable
