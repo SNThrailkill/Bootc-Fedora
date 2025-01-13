@@ -1,5 +1,5 @@
 variables:
-  BUILD_IMAGE:
+  BUILD_TYPE:
     value: none
     options: 
       - "none"
@@ -42,7 +42,7 @@ build-image:
   image: quay.io/podman/stable
   stage: build
   script:
-    - sudo podman run \
+    - podman run \
     - --rm \
     - -it \
     - --privileged \
@@ -51,8 +51,7 @@ build-image:
     - -v $(pwd)/output:/output \
     - -v /var/lib/containers/storage:/var/lib/containers/storage \
     - quay.io/centos-bootc/bootc-image-builder:latest \
-    - --type $BUILD_IMAGE \
-    - --local \
-    - quay.io/fedora/fedora-bootc:40
+    - --type $BUILD_TYPE \
+    - quay.io/fedora/fedora-bootc:41
   rules:
-    - if: $BUILD_IMAGE != "none"
+    - if: $BUILD_TYPE != "none"
