@@ -21,8 +21,6 @@ variables:
 build-base:
   image: quay.io/podman/stable
   stage: build
-  services:
-    - quay.io/podman/stable
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   extends: .podman-login
@@ -33,8 +31,6 @@ build-base:
 build-nginx:
   image: quay.io/podman/stable
   stage: build
-  services:
-    - quay.io/podman/stable
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   extends: .podman-login
@@ -45,8 +41,6 @@ build-nginx:
 build-image:
   image: quay.io/podman/stable
   stage: build
-  services:
-    - quay.io/podman/stable
   script:
     - sudo podman run \
     - --rm \
