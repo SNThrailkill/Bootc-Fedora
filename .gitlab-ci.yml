@@ -43,8 +43,6 @@ build-image:
   stage: build
   script:
     - podman run \
-    - --rm \
-    - -it \
     - --privileged \
     - --pull=newer \
     - --security-opt label=type:unconfined_t \
