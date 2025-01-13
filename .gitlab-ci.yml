@@ -42,10 +42,8 @@ build-image:
   image: quay.io/podman/stable
   stage: build
   script:
-    - podman run \
-    - --privileged \
-    - --pull=newer \
-    - --security-opt label=type:unconfined_t \
+    - podman pull quay.io/fedora/fedora-bootc:41
+    - podman run --privileged --security-opt label=type:unconfined_t \
     - -v $(pwd)/output:/output \
     - -v /var/lib/containers/storage:/var/lib/containers/storage \
     - quay.io/centos-bootc/bootc-image-builder:latest \
@@ -53,3 +51,7 @@ build-image:
     - quay.io/fedora/fedora-bootc:41
   rules:
     - if: $BUILD_TYPE != "none"
+  artifacts:
+    paths:
+      - $(pwd)/output/*
+
