@@ -49,7 +49,7 @@ build-image:
     - -v $(pwd)/output:/output \
     - -v /var/lib/containers/storage:/var/lib/containers/storage \
     - quay.io/centos-bootc/bootc-image-builder:latest \
-    - --type $BUILD_TYPE \
+    - --type $BUILD_TYPE --local \
     - registry.gitlab.com/localthrailkill/bootc-fedora/base:latest
   rules:
     - if: $BUILD_TYPE != "none"
