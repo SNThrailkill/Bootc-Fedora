@@ -9,6 +9,7 @@ HostName=pihole
 PublishPort=53:53/tcp
 PublishPort=53:53/udp
 PublishPort=80:80/tcp
+PublishPort=443:443/tcp
 AutoUpdate=registry
 Network=pihole.network
 Volume=pihole.volume:/etc/pihole
