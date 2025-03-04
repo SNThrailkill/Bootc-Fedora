@@ -17,6 +17,7 @@ RUN dnf clean all
 
 # Enable Cockpit
 RUN systemctl enable cockpit.socket
+RUN bootc container lint
 
 # My personal LB & DNS
 FROM base AS nginx
@@ -25,3 +26,4 @@ COPY nginx/nginx.conf /etc/nginx
 COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service
+RUN bootc container lint
