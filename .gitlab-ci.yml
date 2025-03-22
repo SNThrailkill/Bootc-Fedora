@@ -45,7 +45,7 @@ build-k3s-agent:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   extends: .registry-login
   script:
-    - docker build -f Containerfile --target k3s-agent --build-arg K3S_TOKEN=$K3S_TOKEN -t $IMAGE_TAG/k3s-agent:latest .
+    - docker build -f Containerfile --target k3s-agent --secret id=K3S_TOKEN,env=K3S_TOKEN -t $IMAGE_TAG/k3s-agent:latest .
     - docker push $IMAGE_TAG/k3s-agent:latest
 
 build-image:
