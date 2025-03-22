@@ -8,7 +8,7 @@ RUN systemctl enable podman-auto-update.timer
 RUN systemctl enable bootc-fetch-apply-updates.timer
 
 # Install base packages
-RUN dnf install git cloud-init distrobox qemu-guest-agent \ 
+RUN dnf install curl git cloud-init distrobox qemu-guest-agent \ 
     cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
     nfs-utils libnfsidmap sssd-nfs-idmap \
     zsh \ 
@@ -27,3 +27,6 @@ COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service
 RUN bootc container lint
+
+FROM base AS k3s-agent
+RUN curl -sfL https://get.k3s.io | K3S_URL=https://10.0.0.6:6443 K3S_TOKEN=${K3S_TOKEN} sh -
