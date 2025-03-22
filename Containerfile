@@ -29,6 +29,6 @@ RUN systemctl disable systemd-resolved.service
 RUN bootc container lint
 
 FROM base AS k3s-agent
-RUN dnf install -y https://rpm.rancher.io/k3s/stable/common/coreos/noarch/
-RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | K3S_URL=https://10.0.0.6:6443 K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_ENABLE=true sh -
+RUN dnf install -y container-selinux
+RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | K3S_URL=https://10.0.0.6:6443 K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
 RUN systemctl enable k3s-agent.service
