@@ -38,6 +38,16 @@ build-nginx:
     - docker build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
     - docker push $IMAGE_TAG/nginx:latest
 
+build-k3s-server:
+  image: docker:27
+  stage: build
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE
+  extends: .registry-login
+  script:
+    - docker build -f Containerfile --target k3s-server --secret id=K3S_TOKEN,env=K3S_TOKEN -t $IMAGE_TAG/k3s-server:latest .
+    - docker push $IMAGE_TAG/k3s-server:latest
+
 build-k3s-agent:
   image: docker:27
   stage: build
