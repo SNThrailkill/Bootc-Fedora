@@ -13,7 +13,7 @@ variables:
     description: "The image type to build"
 
 default:
-  image: docker:28
+  image: docker:28-dind
 
 .registry-login:
   before_script:
@@ -44,7 +44,6 @@ build-k3s-server:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
   extends: .registry-login
   script:
-    - sleep 5 
     - docker build -f Containerfile --target k3s-server --secret id=K3S_TOKEN,env=K3S_TOKEN -t $IMAGE_TAG/k3s-server:latest .
     - docker push $IMAGE_TAG/k3s-server:latest
 
