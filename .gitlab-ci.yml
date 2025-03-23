@@ -13,7 +13,9 @@ variables:
     description: "The image type to build"
 
 default:
-  image: docker:28-dind
+  image: docker:28
+  services:
+    - docker:28-dind
 
 .registry-login:
   before_script:
