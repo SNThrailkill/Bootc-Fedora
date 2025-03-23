@@ -12,6 +12,8 @@ variables:
       - "gce"
     description: "The image type to build"
 
+default:
+  image: docker:28
 
 .registry-login:
   before_script:
@@ -19,7 +21,6 @@ variables:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 
 build-base:
-  image: docker:27
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
@@ -29,7 +30,6 @@ build-base:
     - docker push $IMAGE_TAG/base:latest
 
 build-nginx:
-  image: docker:27
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
@@ -39,7 +39,6 @@ build-nginx:
     - docker push $IMAGE_TAG/nginx:latest
 
 build-k3s-server:
-  image: docker:27
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
@@ -49,7 +48,6 @@ build-k3s-server:
     - docker push $IMAGE_TAG/k3s-server:latest
 
 build-k3s-agent:
-  image: docker:27
   stage: build
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE
