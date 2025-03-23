@@ -14,8 +14,6 @@ variables:
 
 default:
   image: docker:28
-  services:
-    - docker:28-dind
 
 .registry-login:
   before_script:
