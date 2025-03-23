@@ -34,6 +34,6 @@ RUN systemctl enable k3s.service
 RUN bootc container lint
 
 FROM base AS k3s-agent
-RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | K3S_URL=https://10.0.1.244:6443 K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
+RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | K3S_URL=https://10.0.1.100:6443 K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
 RUN systemctl enable k3s-agent.service
 RUN bootc container lint
