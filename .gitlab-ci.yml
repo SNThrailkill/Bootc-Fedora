@@ -60,13 +60,18 @@ build-image:
   image: quay.io/podman/stable
   stage: build
   extends: .registry-login
+  variables:
+    PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
+    IMAGE_NAME: registry.gitlab.com/localthrailkill/bootc-fedora/base:latest
   script:
+    - podman pull $IMAGE_NAME
     - podman run --privileged --security-opt label=type:unconfined_t \
     - -v $(pwd)/output:/output \
     - -v /var/lib/containers/storage:/var/lib/containers/storage \
     - quay.io/centos-bootc/bootc-image-builder:latest \
     - --type $BUILD_TYPE \
-    - registry.gitlab.com/localthrailkill/bootc-fedora/base:latest
+    - $IMAGE_NAME
+    - curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file output/bootiso "${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}.iso"
   rules:
     - if: $BUILD_TYPE != "none"
   artifacts:
