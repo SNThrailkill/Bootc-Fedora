@@ -71,7 +71,7 @@ build-image:
     - quay.io/centos-bootc/bootc-image-builder:latest \
     - --type $BUILD_TYPE \
     - $IMAGE_NAME
-    - curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file output/bootiso "${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}.iso"
+    - 'curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file output/bootiso "${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}.iso"'
   rules:
     - if: $BUILD_TYPE != "none"
   artifacts:
