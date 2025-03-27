@@ -67,12 +67,13 @@ build-image:
     - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
     - podman pull $IMAGE_NAME
-    - podman run --privileged --security-opt label=type:unconfined_t \
-    - -v $(pwd)/output:/output \
-    - -v /var/lib/containers/storage:/var/lib/containers/storage \
-    - quay.io/centos-bootc/bootc-image-builder:latest \
-    - --type $BUILD_TYPE \
-    - $IMAGE_NAME
+    - |
+      podman run --privileged --security-opt label=type:unconfined_t \
+      -v $(pwd)/output:/output \
+      -v /var/lib/containers/storage:/var/lib/containers/storage \
+      quay.io/centos-bootc/bootc-image-builder:latest \
+      --type $BUILD_TYPE \
+      $IMAGE_NAME
     - 'curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file output/bootiso "${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}.iso"'
   rules:
     - if: $BUILD_TYPE != "none"
