@@ -67,6 +67,7 @@ build-image:
     - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
     - podman pull $IMAGE_NAME
+    - mkdir output
     - |
       podman run --privileged --security-opt label=type:unconfined_t \
       -v $(pwd)/output:/output \
