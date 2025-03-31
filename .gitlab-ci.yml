@@ -15,6 +15,8 @@ variables:
 default:
   image: docker:28
 
+services:
+  - docker:28-dind
 .registry-login:
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
@@ -57,19 +59,18 @@ build-k3s-agent:
     - docker push $IMAGE_TAG/k3s-agent:latest
 
 build-image:
-  image: quay.io/podman/stable
   stage: build
   variables:
     PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
     IMAGE_NAME: registry.gitlab.com/localthrailkill/bootc-fedora/base:latest
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
-    - sudo podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - sudo podman pull $IMAGE_NAME
+    - docker pull $IMAGE_NAME
     - mkdir output
     - |
-      sudo podman run --privileged --security-opt label=type:unconfined_t \
+      docker run --privileged --security-opt label=type:unconfined_t \
       -v $(pwd)/output:/output \
       -v /var/lib/containers/storage:/var/lib/containers/storage \
       quay.io/centos-bootc/bootc-image-builder:latest \
