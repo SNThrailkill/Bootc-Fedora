@@ -15,8 +15,6 @@ variables:
 
 default:
   image: docker:28
-  services:
-    - podman:latest
 
 .registry-login:
   before_script:
