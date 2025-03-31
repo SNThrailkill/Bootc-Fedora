@@ -11,12 +11,13 @@ variables:
       - "vhd"
       - "gce"
     description: "The image type to build"
+  DOCKER_HOST: tcp://podman:2375
 
 default:
   image: docker:28
+  services:
+    - podman:latest
 
-services:
-  - docker:28-dind
 .registry-login:
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
@@ -59,25 +60,20 @@ build-k3s-agent:
     - docker push $IMAGE_TAG/k3s-agent:latest
 
 build-image:
+  image: quay.io/centos-bootc/bootc-image-builder:latest
   stage: build
   variables:
     PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
-    IMAGE_NAME: registry.gitlab.com/localthrailkill/bootc-fedora/base:latest
+    IMAGE_NAME: $CI_REGISTRY_IMAGE/base:latest
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - docker pull $IMAGE_NAME
-    - mkdir output
+    - podman pull $IMAGE_NAME
+    - /usr/bin/bootc-image-builder $IMAGE_NAME
+    - cd /output
     - |
-      docker run --privileged --security-opt label=type:unconfined_t \
-      -v $(pwd)/output:/output \
-      -v /var/lib/containers/storage:/var/lib/containers/storage \
-      quay.io/centos-bootc/bootc-image-builder:latest \
-      --type $BUILD_TYPE \
-      $IMAGE_NAME
-    - |
-      for FILE in $(ls -1 output); do
+      for FILE in $(ls -1 /output); do
         if [ -f \"$FILE\" ]; then
            curl --header \"JOB-TOKEN: ${CI_JOB_TOKEN}\" --upload-file \"$FILE\" \"${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}/\"
            echo \"Uploaded $FILE\"
@@ -85,6 +81,3 @@ build-image:
       done
   rules:
     - if: $BUILD_TYPE != "none"
-  artifacts:
-    paths:
-      - $(pwd)/output/*
