@@ -57,20 +57,27 @@ build-k3s-agent:
     - docker push $IMAGE_TAG/k3s-agent:latest
 
 build-image:
-  image: quay.io/centos-bootc/bootc-image-builder:latest
+  image: quay.io/podman/stable
   stage: build
   variables:
     PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
     IMAGE_NAME: $CI_REGISTRY_IMAGE/base:latest
   before_script:
     - cp ${REGISTRY_CONF} ./auth.json
-    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - sudo podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - podman pull $IMAGE_NAME
-    - /usr/bin/bootc-image-builder $IMAGE_NAME
-    - cd /output
+    - sudo podman pull $IMAGE_NAME
+    - mkdir output
     - |
-      for FILE in $(ls -1 /output); do
+      sudo podman run --privileged --security-opt label=type:unconfined_t \
+      -v $(pwd)/output:/output \
+      -v /var/lib/containers/storage:/var/lib/containers/storage \
+      quay.io/centos-bootc/bootc-image-builder:latest \
+      --type $BUILD_TYPE \
+      $IMAGE_NAME
+    - cd output
+    - |
+      for FILE in $(ls -1 output); do
         if [ -f \"$FILE\" ]; then
            curl --header \"JOB-TOKEN: ${CI_JOB_TOKEN}\" --upload-file \"$FILE\" \"${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}/\"
            echo \"Uploaded $FILE\"
