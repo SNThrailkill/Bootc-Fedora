@@ -59,7 +59,7 @@ jobs:
       - name: Build bootable image using bootc-image-builder
         run: |
           sudo podman run --rm --privileged \
-            -v ${{ github.workspace }}/output:/output \
+            -v ${{ github.workspace }}/output:/output -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type ${{ github.event.inputs.build_type }} \
             ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
