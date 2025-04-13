@@ -70,7 +70,6 @@ jobs:
             -v ${{ github.workspace }}/output:/output -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type ${{ github.event.inputs.build_type }} \
-            --use-librepo True \
             ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
 
       - name: Upload Bootable Image Artifact
