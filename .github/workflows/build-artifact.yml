@@ -56,6 +56,10 @@ jobs:
       - name: Create output directory
         run: mkdir output
 
+      - name: Pull Image
+        run: |
+          sudo podman pull ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
+
       - name: Build bootable image using bootc-image-builder
         run: |
           sudo podman run --rm --privileged \
