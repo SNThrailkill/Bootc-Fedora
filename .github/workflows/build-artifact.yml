@@ -21,13 +21,13 @@ on:
           - "gce"
 
 env:
-  IMAGE_REGISTRY: "ghcr.io/${{ github.repository }}"
+  IMAGE_REGISTRY: "ghcr.io/${{ github.repository }}/base"
   DEFAULT_TAG: "latest"
 
 jobs:
   build:
     name: Build ISOs
-    runs-on: ${{ inputs.platform == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
     permissions:
@@ -73,57 +73,3 @@ jobs:
           retention-days: 0
           compression-level: 0
           overwrite: true         
-
-build-bootc-image:
-    name: Build Bootable Image (${{ github.event.inputs.build_type }})
-    runs-on: ubuntu-latest
-    # Only run if build_type input is not 'none'
-    if: github.event.inputs.build_type != 'none'
-    # This job needs the base image pushed by the 'build-base' job
-    needs: build-base
-    permissions:
-      contents: read
-      packages: read # Needed to pull from GHCR
-      # actions: write # Needed for upload-artifact - implicitly granted? Check docs if needed.
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Podman
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y podman
-
-      - name: Log in to GitHub Container Registry (Podman)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
-
-      - name: Define Image Name variable for Podman
-        id: image_vars
-        run: |
-          echo "IMAGE_NAME=${{ env.REGISTRY }}/${{ github.repository_owner,, }}/${{ env.IMAGE_BASE_NAME }}/base:latest" >> $GITHUB_ENV
-
-      - name: Pull Base Image
-        run: |
-          sudo podman pull ${{ env.IMAGE_NAME }}
-
-      - name: Create output directory
-        run: mkdir output
-
-      - name: Build bootable image using bootc-image-builder
-        run: |
-          sudo podman run --rm --privileged \
-            -v ${{ github.workspace }}/output:/output \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-            --type ${{ github.event.inputs.build_type }} \
-            ${{ env.IMAGE_NAME }}
-
-      - name: List output files
-        run: ls -l output/
-
-      - name: Upload Bootable Image Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: bootc-image-${{ github.event.inputs.build_type }}
-          path: ${{ github.workspace }}/output/*
-          if-no-files-found: error # Optional: error if the output directory is empty
