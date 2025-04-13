@@ -74,7 +74,9 @@ jobs:
           sep-annotations: " "
 
       - name: Add Private Registry Auth File
-        run: cp ${{ secrets.REGISTRY_CONF }} ./auth.json
+        env:
+          REGISTRY_CONF: ${{ secrets.REGISTRY_CONF }}
+        run: echo $REGISTRY_CONF >> ./auth.json
 
       - name: Build Image
         id: build_image
