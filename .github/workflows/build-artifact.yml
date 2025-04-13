@@ -50,8 +50,12 @@ jobs:
       #   with:
       #     remove-codeql: true
 
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create output directory
         run: mkdir output
@@ -62,10 +66,11 @@ jobs:
 
       - name: Build bootable image using bootc-image-builder
         run: |
-          sudo podman run --rm --privileged \
+          sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
             -v ${{ github.workspace }}/output:/output -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type ${{ github.event.inputs.build_type }} \
+            --use-librepo True \
             ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
 
       - name: Upload Bootable Image Artifact
