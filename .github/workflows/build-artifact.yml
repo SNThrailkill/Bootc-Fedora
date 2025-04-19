@@ -19,9 +19,18 @@ on:
           - "raw"
           - "vhd"
           - "gce"
+      flavor:
+        description: 'The image to create the artifact for'
+        type: choice
+        required: true
+        options:
+          - "base"
+          - "nginx"
+          - "k3s-server"
+          - "k3s-agent"
 
 env:
-  IMAGE_REGISTRY: "ghcr.io/${{ github.repository }}/base"
+  IMAGE_REGISTRY: "ghcr.io/${{ github.repository }}/${{ github.event.inputs.flavor }}"
   DEFAULT_TAG: "latest"
 
 jobs:
