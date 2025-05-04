@@ -131,7 +131,12 @@ jobs:
       - name: Generate SBOM
         id: generate-sbom
         uses: anchore/sbom-action@v0
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
         with:
+          registry-username: ${{ env.REGISTRY_USER }}
+          registry-password: ${{ env.REGISTRY_PASSWORD }}
           image: ${{ steps.image_case.outputs.lowercase }}
           format: spdx-json
           output-file: "sbom.json"
