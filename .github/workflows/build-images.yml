@@ -26,14 +26,14 @@ jobs:
     with:
       build_target: base
 
-  # build-nginx:
-  #   name: Build Nginx Container
-  #   uses: ./.github/workflows/reusable-build-image.yml
-  #   secrets: inherit
-  #   strategy:
-  #     fail-fast: false
-  #   with:
-  #     build_target: nginx
+  build-nginx:
+    name: Build Nginx Container
+    uses: ./.github/workflows/reusable-build-image.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+    with:
+      build_target: nginx
 
   # build-k3s-server:
   #   name: Build K3s Server Container
@@ -60,3 +60,6 @@ permissions:
    security-events: write
    # Read commit contents
    contents: read
+   # Normal build stuff
+   packages: write
+   id-token: write
