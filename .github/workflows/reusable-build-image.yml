@@ -200,8 +200,7 @@ jobs:
         env:
           SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         run: |
-          cd "$(dirname "$SBOM_OUTPUT")"
-          cat sbom.json
+          cat $SBOM_OUTPUT/sbom.json
 
       - name: Check SARIF
         id: test-sarif
