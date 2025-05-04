@@ -195,8 +195,27 @@ jobs:
           fail-build: false
           severity-cutoff: high
 
+      - name: Check SBOM
+        id: test
+        run: |
+          cd "$(dirname "$SBOM_OUTPUT")"
+          cat sbom.json
+
+      - name: Check SARIF
+        id: test
+        run: |
+          cat ${{ steps.scan.outputs.sarif }}
+
       - name: Upload SARIF report
         id: upload
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
+
+permissions:
+   # Required to upload SARIF file to CodeQL. See: https://github.com/github/codeql-action/issues/2117
+   actions: read
+   # Require writing security events to upload SARIF file to security tab
+   security-events: write
+   # Read commit contents
+   contents: read
