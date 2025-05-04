@@ -131,15 +131,12 @@ jobs:
       - name: Generate SBOM
         id: generate-sbom
         uses: anchore/sbom-action@v0
-        env:
-          REGISTRY_USER: ${{ github.actor }}
-          REGISTRY_PASSWORD: ${{ github.token }}
         with:
-          registry-username: ${{ env.REGISTRY_USER }}
-          registry-password: ${{ env.REGISTRY_PASSWORD }}
-          image: ${{ steps.image_case.outputs.lowercase }}
+          image: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           format: spdx-json
           output-file: "sbom.json"
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN  }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
@@ -153,15 +150,12 @@ jobs:
         uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         id: push
-        env:
-          REGISTRY_USER: ${{ github.actor }}
-          REGISTRY_PASSWORD: ${{ github.token }}
         with:
           registry: ${{ steps.registry_case.outputs.lowercase }}
           image: ${{ steps.image_case.outputs.lowercase }}
           tags: ${{ steps.metadata.outputs.tags }}
-          username: ${{ env.REGISTRY_USER }}
-          password: ${{ env.REGISTRY_PASSWORD }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # This section is optional and only needs to be enabled if you plan on distributing
       # your project for others to consume. You will need to create a public and private key
