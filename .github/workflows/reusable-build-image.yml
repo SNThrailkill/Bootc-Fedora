@@ -196,13 +196,13 @@ jobs:
           severity-cutoff: high
 
       - name: Check SBOM
-        id: test sbom
+        id: test-sbom
         run: |
           cd "$(dirname "$SBOM_OUTPUT")"
           cat sbom.json
 
       - name: Check SARIF
-        id: test sarif
+        id: test-sarif
         run: |
           cat ${{ steps.scan.outputs.sarif }}
 
