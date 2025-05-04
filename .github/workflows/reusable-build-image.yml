@@ -114,19 +114,27 @@ jobs:
         with:
           syft-version: v1.20.0
 
-      - name: Generate SBOM
-        if: false
-        id: generate-sbom
-        env:
-          IMAGE: ${{ env.IMAGE_NAME }}
-          SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
-        run: |
-          sudo systemctl start podman.socket
+      # - name: Generate SBOM
+      #   if: false
+      #   id: generate-sbom
+      #   env:
+      #     IMAGE: ${{ env.IMAGE_NAME }}
+      #     SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
+      #   run: |
+      #     sudo systemctl start podman.socket
 
-          OUTPUT_PATH="$(mktemp -d)/sbom.json"
-          export SYFT_PARALLELISM=$(($(nproc)*2))
-          sudo $SYFT_CMD ${IMAGE} -o spdx-json=${OUTPUT_PATH}
-          echo "OUTPUT_PATH=${OUTPUT_PATH}" >> $GITHUB_OUTPUT
+      #     OUTPUT_PATH="$(mktemp -d)/sbom.json"
+      #     export SYFT_PARALLELISM=$(($(nproc)*2))
+      #     sudo $SYFT_CMD ${IMAGE} -o spdx-json=${OUTPUT_PATH}
+      #     echo "OUTPUT_PATH=${OUTPUT_PATH}" >> $GITHUB_OUTPUT
+
+      - name: Generate SBOM
+        id: generate-sbom
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.image_case.outputs.lowercase }}
+          format: spdx-json
+          output-file: "sbom.json"
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
@@ -173,12 +181,10 @@ jobs:
       - name: Add SBOM Attestation
         if: false
         env:
-          IMAGE: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
-          DIGEST: ${{ steps.push.outputs.outputs && fromJSON(steps.push.outputs.outputs).digest }}
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-          SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         run: |
-          cd "$(dirname "$SBOM_OUTPUT")"
           cosign attest -y \
             --predicate ./sbom.json \
             --type spdxjson \
@@ -188,24 +194,17 @@ jobs:
       - name: Scan SBOM for vulnerabilities
         id: scan
         uses: anchore/scan-action@v6
-        env:
-          SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         with:
-          sbom: "$SBOM_OUTPUT/sbom.json"
+          sbom: "sbom.json"
+          output-file: "sarif.json"
           fail-build: false
           severity-cutoff: high
 
       - name: Check SBOM
         id: test-sbom
-        env:
-          SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         run: |
-          cat $SBOM_OUTPUT/sbom.json
-
-      - name: Check SARIF
-        id: test-sarif
-        run: |
-          cat ${{ steps.scan.outputs.sarif }}
+          cat sbom.json
+          cat sarif.json
 
       - name: Upload SARIF report
         id: upload
