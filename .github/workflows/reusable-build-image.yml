@@ -197,6 +197,8 @@ jobs:
 
       - name: Check SBOM
         id: test-sbom
+        env:
+          SBOM_OUTPUT: ${{ steps.generate-sbom.outputs.OUTPUT_PATH }}
         run: |
           cd "$(dirname "$SBOM_OUTPUT")"
           cat sbom.json
