@@ -16,6 +16,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
   cancel-in-progress: true
 
+permissions: write-all
+
 jobs:
   build-base:
     name: Build Base Container
@@ -25,6 +27,15 @@ jobs:
       fail-fast: false
     with:
       build_target: base
+    # permissions:
+    #   # Required to upload SARIF file to CodeQL. See: https://github.com/github/codeql-action/issues/2117
+    #   actions: read
+    #   # Require writing security events to upload SARIF file to security tab
+    #   security-events: write
+    #   # Read commit contents
+    #   contents: read
+    #   attestations: write
+    #   packages: write
 
   # build-nginx:
   #   name: Build Nginx Container
@@ -52,14 +63,3 @@ jobs:
   #     fail-fast: false
   #   with:
   #     build_target: k3s-agent
-
-permissions:
-   # Required to upload SARIF file to CodeQL. See: https://github.com/github/codeql-action/issues/2117
-   actions: read
-   # Require writing security events to upload SARIF file to security tab
-   security-events: write
-   # Read commit contents
-   contents: read
-   # Normal build stuff
-   packages: write
-   id-token: write
