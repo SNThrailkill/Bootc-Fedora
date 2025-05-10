@@ -16,8 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
   cancel-in-progress: true
 
-permissions: write-all
-
 jobs:
   build-base:
     name: Build Base Container
