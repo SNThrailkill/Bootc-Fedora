@@ -1,0 +1,8 @@
+#cloud-config
+write_files:
+  - path: /etc/systemd/system/k3s.service.env
+    content: |
+      K3S_TOKEN=yourtokenhere
+      K3S_URL=https://my.host:6443
+    permissions: '0644'
+    owner: root:root

@@ -25,39 +25,32 @@ jobs:
       fail-fast: false
     with:
       build_target: base
-    # permissions:
-    #   # Required to upload SARIF file to CodeQL. See: https://github.com/github/codeql-action/issues/2117
-    #   actions: read
-    #   # Require writing security events to upload SARIF file to security tab
-    #   security-events: write
-    #   # Read commit contents
-    #   contents: read
-    #   attestations: write
-    #   packages: write
 
-  # build-nginx:
-  #   name: Build Nginx Container
-  #   uses: ./.github/workflows/reusable-build-image.yml
-  #   secrets: inherit
-  #   strategy:
-  #     fail-fast: false
-  #   with:
-  #     build_target: nginx
+  build-nginx:
+    name: Build Nginx Container
+    uses: ./.github/workflows/reusable-build-image.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+    with:
+      build_target: nginx
 
-  # build-k3s-server:
-  #   name: Build K3s Server Container
-  #   uses: ./.github/workflows/reusable-k3s-build-image.yml
-  #   secrets: inherit
-  #   strategy:
-  #     fail-fast: false
-  #   with:
-  #     build_target: k3s-server
+  build-k3s-server:
+    name: Build K3s Server Container
+    uses: ./.github/workflows/reusable-build-image.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+    with:
+      build_target: k3s-server
+      containerfile: ./k3s/day2/Containerfile
 
-  # build-k3s-agent:
-  #   name: Build K3s Agent Container
-  #   uses: ./.github/workflows/reusable-k3s-build-image.yml
-  #   secrets: inherit
-  #   strategy:
-  #     fail-fast: false
-  #   with:
-  #     build_target: k3s-agent
+  build-k3s-agent:
+    name: Build K3s Agent Container
+    uses: ./.github/workflows/reusable-build-image.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+    with:
+      build_target: k3s-agent
+      containerfile: ./k3s/day2/Containerfile

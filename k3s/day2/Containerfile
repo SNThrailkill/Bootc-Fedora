@@ -1,0 +1,5 @@
+# Check README for why there is only 1 image for both `server` and `agent` configurations
+FROM ghcr.io/snthrailkill/bootc-fedora/base:latest AS k3s-node
+RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
+RUN systemctl enable k3s.service
+RUN bootc container lint

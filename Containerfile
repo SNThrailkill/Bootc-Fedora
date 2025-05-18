@@ -19,21 +19,11 @@ RUN dnf clean all
 RUN systemctl enable cockpit.socket
 RUN bootc container lint
 
-# My personal LB & DNS
+# My personal LB & DNS node
 FROM base AS nginx
 COPY nginx/nginx.container /usr/share/containers/systemd
 COPY nginx/nginx.conf /etc/nginx
 COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service
-RUN bootc container lint
-
-FROM base AS k3s-server
-RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
-RUN systemctl enable k3s.service
-RUN bootc container lint
-
-FROM base AS k3s-agent
-RUN --mount=type=secret,id=K3S_TOKEN,env=K3S_TOKEN curl -sfL https://get.k3s.io | K3S_URL=https://10.0.1.100:6443 K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
-RUN systemctl enable k3s-agent.service
 RUN bootc container lint
