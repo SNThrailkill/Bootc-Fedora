@@ -93,10 +93,14 @@ jobs:
           sep-tags: " "
           sep-annotations: " "
 
-      - name: Add Private Registry Auth File
-        env:
-          REGISTRY_CONF: ${{ secrets.REGISTRY_CONF }}
-        run: echo $REGISTRY_CONF >> ./auth.json
+      # If you are going to do a private registry for your images, you'll need to provide an auth.json
+      # to /etc/ostree/auth.json. If you will need to auth into private registries for containers that
+      # will run on your bootc image then youll need another separate auth.json to /etc/containers/auth.json
+      # See https://docs.fedoraproject.org/en-US/bootc/container-pull-secrets/
+      # - name: Add Private Registry Auth File
+      #   env:
+      #     REGISTRY_CONF: ${{ secrets.REGISTRY_CONF }}
+      #   run: echo $REGISTRY_CONF >> ./auth.json
 
       - name: Build Image
         id: build_image
@@ -119,20 +123,6 @@ jobs:
         uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # v0
         with:
           syft-version: v1.20.0
-
-      # - name: Generate SBOM
-      #   if: false
-      #   id: generate-sbom
-      #   env:
-      #     IMAGE: ${{ env.IMAGE_NAME }}
-      #     SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
-      #   run: |
-      #     sudo systemctl start podman.socket
-
-      #     OUTPUT_PATH="$(mktemp -d)/sbom.json"
-      #     export SYFT_PARALLELISM=$(($(nproc)*2))
-      #     sudo $SYFT_CMD ${IMAGE} -o spdx-json=${OUTPUT_PATH}
-      #     echo "OUTPUT_PATH=${OUTPUT_PATH}" >> $GITHUB_OUTPUT
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
