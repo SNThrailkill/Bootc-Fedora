@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:41 AS base
+FROM quay.io/fedora/fedora-bootc:42 AS base
 
 # Copy over the creds needed for future bootc updates
 COPY ./auth.json /etc/ostree/auth.json
@@ -27,3 +27,21 @@ COPY pihole/* /etc/containers/systemd
 # Disable systemd-resolved to not conflict on port 53 for pihole
 RUN systemctl disable systemd-resolved.service
 RUN bootc container lint
+
+FROM base AS prometheus
+WORKDIR /tmp
+# Install Prometheus
+RUN curl -OL https://github.com/prometheus/prometheus/releases/download/v3.4.0/prometheus-3.4.0.linux-amd64.tar.gz && \
+    tar -xvf prometheus-3.4.0.linux-amd64.tar.gz && \
+    mkdir /etc/prometheus && \
+    mv prometheus-3.4.0.linux-amd64/prometheus /usr/local/bin/ && \
+    mv prometheus-3.4.0.linux-amd64/promtool /usr/local/bin/
+COPY prometheus/prometheus.yml /etc/prometheus
+COPY prometheus/prometheus.service /etc/systemd/system
+RUN systemctl enable prometheus
+# Install Node Exporter
+RUN curl -OL https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz && \
+    tar -xvf node_exporter-1.9.1.linux-amd64.tar.gz && \
+    mv node_exporter-1.9.1.linux-amd64/node_exporter /usr/local/bin/
+COPY prometheus/node_exporter.service /etc/systemd/system
+RUN systemctl enable node_exporter

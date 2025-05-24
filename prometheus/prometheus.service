@@ -1,0 +1,19 @@
+[Unit]
+Description=Prometheus Monitoring System
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+# Directories managed by systemd for the dynamic user
+# Prometheus will store its time series database (TSDB) here.
+# 'prometheus-data' will be created under /var/lib/ and owned by the dynamic user.
+StateDirectory=prometheus
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus/ \
+  --web.listen-address=0.0.0.0:9091
+
+[Install]
+WantedBy=multi-user.target
