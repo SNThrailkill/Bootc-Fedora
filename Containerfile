@@ -19,7 +19,7 @@ RUN dnf clean all
 RUN systemctl enable cockpit.socket
 RUN bootc container lint
 
-# My personal LB & DNS node
+# This image combines a user-level quadlet for Nginx and a system-level quadlet for Pi-Hole in one image
 FROM base AS nginx
 COPY nginx/nginx.container /usr/share/containers/systemd
 COPY nginx/nginx.conf /etc/nginx
@@ -45,3 +45,4 @@ RUN curl -OL https://github.com/prometheus/node_exporter/releases/download/v1.9.
     mv node_exporter-1.9.1.linux-amd64/node_exporter /usr/local/bin/
 COPY prometheus/node_exporter.service /etc/systemd/system
 RUN systemctl enable node_exporter
+RUN bootc container lint
