@@ -204,11 +204,6 @@ jobs:
           output-file: "sarif.json"
           fail-build: false
           severity-cutoff: high
-      
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SARIF Report
-          path: ./sarif.json
 
       - name: Upload SARIF report
         id: upload
