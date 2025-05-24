@@ -7,6 +7,10 @@ These images assume you are using `cloud-init`, `kickstart`, or similar tool to 
 
 The `Containerfile` contains multiple stages that can be used to get exactly the software you need. See [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/) documentation for more information on how this works. For this repo, the image tag is the same as the build target name.
 
+The GitHub Actions and Containerfile has support for private registry/repository if you uncomment the applicable lines.
+
+The GitHub Actions also will create a [SBOM](https://anchore.com/sbom/what-is-an-sbom/) of your image using [Syft](https://github.com/anchore/syft/), run a vulnerbility scan using [Grype](https://github.com/anchore/grype/), and upload the report to your Code Scanning page in the Security center of your repository. This will only work if your repo has Code Scanning enabled for your repository. [See the GitHub docs](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) for which repos can enable this.
+
 ## K3S
 This folder contains two different paradigms for deploying a K3s cluster with both `server` and `agent` nodes. Meant to be installed on a server that will act as a Kubernetes host. 
 
