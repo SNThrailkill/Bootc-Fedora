@@ -1,8 +1,0 @@
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      # Change to port 9091 since Cockpit uses 9090. Node Exporter runs on 9100
-      - targets: ['localhost:9091', 'localhost:9100'] 

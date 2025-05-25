@@ -28,21 +28,31 @@ COPY pihole/* /etc/containers/systemd
 RUN systemctl disable systemd-resolved.service
 RUN bootc container lint
 
-FROM base AS prometheus
+FROM base AS observability
 WORKDIR /tmp
-# Install Prometheus
-RUN curl -OL https://github.com/prometheus/prometheus/releases/download/v3.4.0/prometheus-3.4.0.linux-amd64.tar.gz && \
-    tar -xvf prometheus-3.4.0.linux-amd64.tar.gz && \
+# Install Alloy for sending metrics and logs to Prometheus
+COPY observability/alloy/alloy.container /etc/containers/systemd
+COPY observability/alloy/containers.alloy observability/alloy/linux.alloy /etc/alloy/
+# Create dir to use to mount into container
+RUN mkdir /var/lib/alloy
+RUN bootc container lint
+
+FROM observability AS prometheus
+WORKDIR /tmp
+# Install Prometheus with standalone binary
+RUN curl -OL https://github.com/prometheus/prometheus/releases/download/v3.4.0/prometheus-3.4.0.linux-amd64.tar.gz
+RUN tar -xvf prometheus-3.4.0.linux-amd64.tar.gz && \
     mkdir /etc/prometheus && \
     mv prometheus-3.4.0.linux-amd64/prometheus /usr/local/bin/ && \
     mv prometheus-3.4.0.linux-amd64/promtool /usr/local/bin/
-COPY prometheus/prometheus.yml /etc/prometheus
-COPY prometheus/prometheus.service /etc/systemd/system
-RUN systemctl enable prometheus
-# Install Node Exporter
-RUN curl -OL https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz && \
-    tar -xvf node_exporter-1.9.1.linux-amd64.tar.gz && \
-    mv node_exporter-1.9.1.linux-amd64/node_exporter /usr/local/bin/
-COPY prometheus/node_exporter.service /etc/systemd/system
-RUN systemctl enable node_exporter
+    COPY observability/prometheus/prometheus.yml /etc/prometheus
+    COPY observability/prometheus/prometheus.service /etc/systemd/system
+    RUN systemctl enable prometheus
+# Install Loki
+RUN curl -LO https://rpm.grafana.com/gpg.key && \
+    rpm --import gpg.key && \
+    echo -e '[grafana]\nname=grafana\nbaseurl=https://rpm.grafana.com\nrepo_gpgcheck=0\nenabled=1\ngpgcheck=1\ngpgkey=https://rpm.grafana.com/gpg.key\nsslverify=1\nsslcacert=/etc/pki/tls/certs/ca-bundle.crt' | sudo tee /etc/yum.repos.d/grafana.repo
+RUN dnf install loki grafana -y
+COPY observability/loki/config.yml /etc/loki
+RUN systemctl enable loki.service
 RUN bootc container lint
