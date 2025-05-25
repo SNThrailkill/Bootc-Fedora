@@ -1,0 +1,52 @@
+// This alloy configuration is specifically for forwarding logs and metrics
+// of Containers running on the host.
+// For a full configuration reference, see https://grafana.com/docs/alloy
+
+// ###############################
+// #### Metrics Configuration ####
+// ###############################
+
+// Host Cadvisor on the Docker socket to expose container metrics. This will work for Podman too.
+prometheus.exporter.cadvisor "cadvisor" {
+  docker_host = "unix:///var/run/docker.sock"
+  storage_duration = "5m"
+}
+
+// Configure a prometheus.scrape component to collect cadvisor metrics.
+prometheus.scrape "docker" {
+  targets    = prometheus.exporter.cadvisor.cadvisor.targets
+  forward_to = [ prometheus.remote_write.local.receiver ]
+
+
+  scrape_interval = "10s"
+}
+
+// ###############################
+// #### Logging Configuration ####
+// ###############################
+
+// Discover containers and extract metadata.
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Define a relabeling rule to create a service name from the container name.
+discovery.relabel "logs_integrations_docker" {
+      targets = []
+  
+      rule {
+          source_labels = ["__meta_docker_container_name"]
+          regex = "/(.*)"
+          target_label = "service_name"
+      }
+  }
+
+
+// Configure a loki.source.docker component to collect logs from Docker containers.
+loki.source.docker "docker" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.docker.containers.targets
+  labels     = {"platform" = "docker"}
+  relabel_rules = discovery.relabel.logs_integrations_docker.rules
+  forward_to = [loki.write.local.receiver]
+}
