@@ -1,4 +1,4 @@
-FROM quay.io/centos-bootc/centos-bootc:stream9 AS base
+FROM quay.io/centos-bootc/centos-bootc:stream9 AS nas
 
 
 # Enable the simple "automatic update containers" timer for both quadlets
