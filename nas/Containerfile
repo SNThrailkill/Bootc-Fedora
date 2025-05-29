@@ -1,0 +1,31 @@
+FROM quay.io/centos-bootc/centos-bootc:stream9 AS base
+
+
+# Enable the simple "automatic update containers" timer for both quadlets
+RUN systemctl enable podman-auto-update.timer
+
+# Install EPEL + base packages
+RUN dnf config-manager --set-enabled crb && dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm -y
+RUN dnf install curl git qemu-guest-agent \ 
+    cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
+    nfs-utils samba samba-usershares libnfsidmap sssd-nfs-idmap firewalld \
+    zsh \ 
+    -y
+RUN dnf install https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm -y
+RUN dnf clean all
+
+# Enable Cockpit
+RUN systemctl enable cockpit.socket
+
+# Enable NFS and Samba to start on boot
+RUN systemctl enable nfs-server.service && systemctl enable smb.service
+
+# Setup Firewall Rules
+RUN firewall-offline-cmd --add-service=nfs && \
+    firewall-offline-cmd --add-service=samba
+
+# Get ZFS manager for Cockpit and install 
+RUN git clone https://github.com/45drives/cockpit-zfs-manager.git && cp -r cockpit-zfs-manager/zfs /usr/share/cockpit
+
+RUN bootc container lint
+
