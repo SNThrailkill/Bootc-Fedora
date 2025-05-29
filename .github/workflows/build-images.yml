@@ -71,5 +71,4 @@ jobs:
     strategy:
       fail-fast: false
     with:
-      build_target: prometheus
       containerfile: ./nas/Containerfile
