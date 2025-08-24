@@ -67,6 +67,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: test pwd
+        run: |
+          pwd 
+          ls -lah
+
       - name: Build bootable image using bootc-image-builder
         id: build
         uses: osbuild/bootc-image-builder-action@main
