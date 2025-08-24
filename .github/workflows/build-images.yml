@@ -10,7 +10,6 @@ on:
       - main
     paths-ignore:
       - '**/README.md'
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
