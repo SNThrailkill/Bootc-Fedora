@@ -44,6 +44,9 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       # Workaround bug where capital letters in your GitHub username make it impossible to push to GHCR.
       # https://github.com/macbre/push-to-ghcr/issues/12
       - name: Lowercase Registry
@@ -65,19 +68,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: test pwd
-        run: |
-          cd ..
-          pwd 
-          ls -lah
-
       - name: Build bootable image using bootc-image-builder
         id: build
         uses: osbuild/bootc-image-builder-action@main
         with:
           image: ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
           types: ${{ github.event.inputs.build_type }}
-          config-file: ../config.toml
+          config-file: config.toml
           additional-args: --use-librepo=True
 
       - name: Upload Bootable Image Artifact
