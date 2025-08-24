@@ -26,10 +26,9 @@ on:
         options:
           - "base"
           - "nginx"
-          - "k3s-server"
-          - "k3s-agent"
+          - "k3s"
           - "prometheus"
-          - "nas"
+          #- "nas"
 
 env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository }}/${{ github.event.inputs.flavor }}"
