@@ -35,8 +35,8 @@ jobs:
     with:
       build_target: nginx
 
-  build-k3s-server:
-    name: Build K3s Server Image
+  build-k3s:
+    name: Build K3s Image
     uses: ./.github/workflows/reusable-build-image.yml
     secrets: inherit
     strategy:

@@ -74,13 +74,21 @@ jobs:
         run: |
           sudo podman pull ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
 
+      # - name: Build bootable image using bootc-image-builder
+      #   run: |
+      #     sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
+      #       -v ${{ github.workspace }}/output:/output -v /var/lib/containers/storage:/var/lib/containers/storage \
+      #       quay.io/centos-bootc/bootc-image-builder:latest \
+      #       --type ${{ github.event.inputs.build_type }} \
+      #       ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
+
       - name: Build bootable image using bootc-image-builder
-        run: |
-          sudo podman run --rm --privileged --pull=newer --security-opt label=type:unconfined_t \
-            -v ${{ github.workspace }}/output:/output -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-            --type ${{ github.event.inputs.build_type }} \
-            ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
+        id: build
+        uses: osbuild/bootc-image-builder-action@main
+        with:
+          image: ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
+          types: ${{ github.event.inputs.build_type }}
+          additional-args: --use-librepo=True
 
       - name: Upload Bootable Image Artifact
         uses: actions/upload-artifact@v4
