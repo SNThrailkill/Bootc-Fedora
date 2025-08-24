@@ -67,8 +67,9 @@ jobs:
 
       - name: test pwd
         run: |
+          cd ..
           pwd 
-          ls -lah ${{ github.workspace }}
+          ls -lah
 
       - name: Build bootable image using bootc-image-builder
         id: build
@@ -76,7 +77,7 @@ jobs:
         with:
           image: ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
           types: ${{ github.event.inputs.build_type }}
-          config-file: ${{ github.workspace }}/config.toml
+          config-file: ../config.toml
           additional-args: --use-librepo=True
 
       - name: Upload Bootable Image Artifact
