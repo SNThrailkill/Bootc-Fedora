@@ -75,6 +75,7 @@ jobs:
           image: ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
           types: ${{ github.event.inputs.build_type }}
           config-file: ./config.toml
+          roots: btrfs
           additional-args: --use-librepo=True
 
       - name: Upload Bootable Image Artifact
