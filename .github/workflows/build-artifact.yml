@@ -68,7 +68,7 @@ jobs:
       - name: test pwd
         run: |
           pwd 
-          ls -lah
+          ls -lah ${{ github.workspace }}
 
       - name: Build bootable image using bootc-image-builder
         id: build
