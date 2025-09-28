@@ -12,7 +12,10 @@ The GitHub Actions and Containerfile has support for private registry/repository
 The GitHub Actions also will create a [SBOM](https://anchore.com/sbom/what-is-an-sbom/) of your image using [Syft](https://github.com/anchore/syft/), run a vulnerbility scan using [Grype](https://github.com/anchore/grype/), and upload the report to your Code Scanning page in the Security center of your repository. This will only work if your repo has Code Scanning enabled for your repository. [See the GitHub docs](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) for which repos can enable this.
 
 ## K3S
-This folder contains two different paradigms for deploying a K3s cluster with both `server` and `agent` nodes. Meant to be installed on a server that will act as a Kubernetes host. 
+This image simply installs k3s on our base image. Meant to be used as either server or agent.
+
+## NAS
+WIP!
 
 ## Nginx
 This runs as a quadlet and is configured by the `nginx.conf` which is placed in the `/etc/nginx` folder.
