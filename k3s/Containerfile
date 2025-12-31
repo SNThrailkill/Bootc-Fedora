@@ -1,4 +1,5 @@
 FROM ghcr.io/snthrailkill/bootc-fedora/base:latest AS k3s
 RUN curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
 RUN systemctl enable k3s.service
+RUN systemctl disable bootc-fetch-apply-updates.timer # We DONT want k3s to reboot automatically on updates
 RUN bootc container lint

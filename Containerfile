@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:42 AS base
+FROM quay.io/fedora/fedora-bootc:43 AS base
 
 # Copy any the creds needed for registry auth
 # COPY ./auth.json /etc/ostree/auth.json
