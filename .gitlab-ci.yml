@@ -1,6 +1,7 @@
 variables:
+  DEFAULT_TAG: "latest"
   BUILD_TYPE:
-    value: none
+    value: "none"
     options: 
       - "none"
       - "ami"
@@ -13,75 +14,99 @@ variables:
     description: "The image type to build"
 
 default:
-  image: docker:28
+  image: quay.io/buildah/stable
+
+stages:
+  - build
+  - artifact
 
 .registry-login:
   before_script:
-    - cp ${REGISTRY_CONF} ./auth.json
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - buildah login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+.get-image-info:
+  script:
+    - export IMAGE_DATE=$(date -u +%Y%m%d)
+    - export BUILD_TAG="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}"
+    - export BUILD_TAG_DATED="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}.${IMAGE_DATE}"
 
 build-base:
+  extends:
+    - .registry-login
+    - .get-image-info
   stage: build
   variables:
-    IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: .registry-login
+    BUILD_TARGET: "base"
+    CONTAINERFILE: "Containerfile"
   script:
-    - docker build -f Containerfile --target base -t $IMAGE_TAG/base:latest .
-    - docker push $IMAGE_TAG/base:latest
+    - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
+    - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
+    - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
 
 build-nginx:
+  extends:
+    - .registry-login
+    - .get-image-info
   stage: build
   variables:
-    IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: .registry-login
+    BUILD_TARGET: "nginx"
+    CONTAINERFILE: "Containerfile"
   script:
-    - docker build -f Containerfile --target nginx -t $IMAGE_TAG/nginx:latest .
-    - docker push $IMAGE_TAG/nginx:latest
+    - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
+    - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
+    - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
 
-build-k3s-server:
+build-k3s:
+  extends:
+    - .registry-login
+    - .get-image-info
   stage: build
   variables:
-    IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: .registry-login
+    BUILD_TARGET: "k3s"
+    CONTAINERFILE: "k3s/Containerfile"
   script:
-    - docker build -f Containerfile --target k3s-server --secret id=K3S_TOKEN,env=K3S_TOKEN -t $IMAGE_TAG/k3s-server:latest .
-    - docker push $IMAGE_TAG/k3s-server:latest
+    - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
+    - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
+    - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
 
-build-k3s-agent:
+build-prometheus:
+  extends:
+    - .registry-login
+    - .get-image-info
   stage: build
   variables:
-    IMAGE_TAG: $CI_REGISTRY_IMAGE
-  extends: .registry-login
+    BUILD_TARGET: "prometheus"
+    CONTAINERFILE: "Containerfile"
   script:
-    - docker build -f Containerfile --target k3s-agent --secret id=K3S_TOKEN,env=K3S_TOKEN -t $IMAGE_TAG/k3s-agent:latest .
-    - docker push $IMAGE_TAG/k3s-agent:latest
+    - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
+    - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
+    - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
 
-build-image:
+build-artifact:
   image: quay.io/podman/stable
-  stage: build
+  stage: artifact
+  needs:
+    - build-base
   variables:
-    PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
-    IMAGE_NAME: $CI_REGISTRY_IMAGE/base:latest
+    ARTIFACT_FLAVOR: "base"
   before_script:
-    - cp ${REGISTRY_CONF} ./auth.json
-    - sudo podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - sudo podman pull $IMAGE_NAME
-    - mkdir output
+    - podman pull $CI_REGISTRY_IMAGE/${ARTIFACT_FLAVOR}:${DEFAULT_TAG}
+    - mkdir -p output
+    - echo "Building ${BUILD_TYPE} artifact for ${ARTIFACT_FLAVOR}"
     - |
-      sudo podman run --privileged --security-opt label=type:unconfined_t \
+      podman run --rm --privileged \
       -v $(pwd)/output:/output \
       -v /var/lib/containers/storage:/var/lib/containers/storage \
       quay.io/centos-bootc/bootc-image-builder:latest \
-      --type $BUILD_TYPE \
-      $IMAGE_NAME
-    - cd output
-    - |
-      for FILE in $(ls -1 output); do
-        if [ -f \"$FILE\" ]; then
-           curl --header \"JOB-TOKEN: ${CI_JOB_TOKEN}\" --upload-file \"$FILE\" \"${PACKAGE_REGISTRY_URL}/${CI_PROJECT_NAME}/\"
-           echo \"Uploaded $FILE\"
-        fi
-      done
+      --type ${BUILD_TYPE} \
+      $CI_REGISTRY_IMAGE/${ARTIFACT_FLAVOR}:${DEFAULT_TAG}
+    - echo "Artifact build completed successfully"
+  artifacts:
+    paths:
+      - output/*
+    expire_in: 30 days
+    when: on_success
   rules:
     - if: $BUILD_TYPE != "none"
