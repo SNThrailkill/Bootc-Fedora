@@ -24,21 +24,19 @@ stages:
   before_script:
     - buildah login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 
-.get-image-info:
-  script:
-    - export IMAGE_DATE=$(date -u +%Y%m%d)
-    - export BUILD_TAG="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}"
-    - export BUILD_TAG_DATED="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}.${IMAGE_DATE}"
+
 
 build-base:
   extends:
     - .registry-login
-    - .get-image-info
   stage: build
   variables:
     BUILD_TARGET: "base"
     CONTAINERFILE: "Containerfile"
   script:
+    - export IMAGE_DATE=$(date -u +%Y%m%d)
+    - export BUILD_TAG="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}"
+    - export BUILD_TAG_DATED="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}.${IMAGE_DATE}"
     - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
     - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
     - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
@@ -46,12 +44,14 @@ build-base:
 build-nginx:
   extends:
     - .registry-login
-    - .get-image-info
   stage: build
   variables:
     BUILD_TARGET: "nginx"
     CONTAINERFILE: "Containerfile"
   script:
+    - export IMAGE_DATE=$(date -u +%Y%m%d)
+    - export BUILD_TAG="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}"
+    - export BUILD_TAG_DATED="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}.${IMAGE_DATE}"
     - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
     - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
     - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
@@ -59,12 +59,14 @@ build-nginx:
 build-k3s:
   extends:
     - .registry-login
-    - .get-image-info
   stage: build
   variables:
     BUILD_TARGET: "k3s"
     CONTAINERFILE: "k3s/Containerfile"
   script:
+    - export IMAGE_DATE=$(date -u +%Y%m%d)
+    - export BUILD_TAG="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}"
+    - export BUILD_TAG_DATED="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}.${IMAGE_DATE}"
     - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
     - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
     - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
@@ -72,12 +74,14 @@ build-k3s:
 build-prometheus:
   extends:
     - .registry-login
-    - .get-image-info
   stage: build
   variables:
     BUILD_TARGET: "prometheus"
     CONTAINERFILE: "Containerfile"
   script:
+    - export IMAGE_DATE=$(date -u +%Y%m%d)
+    - export BUILD_TAG="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}"
+    - export BUILD_TAG_DATED="$CI_REGISTRY_IMAGE/${BUILD_TARGET}:${DEFAULT_TAG}.${IMAGE_DATE}"
     - buildah build-using-dockerfile -f ${CONTAINERFILE} --target ${BUILD_TARGET} -t ${BUILD_TAG} -t ${BUILD_TAG_DATED} .
     - buildah push ${BUILD_TAG} docker://${BUILD_TAG}
     - buildah push ${BUILD_TAG_DATED} docker://${BUILD_TAG_DATED}
