@@ -9,24 +9,17 @@ RUN systemctl enable bootc-fetch-apply-updates.timer
 
 # Install base packages
 RUN dnf install curl git cloud-init distrobox qemu-guest-agent \ 
-    cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
-    nfs-utils libnfsidmap sssd-nfs-idmap \
-    zsh \ 
-    -y
+cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
+nfs-utils libnfsidmap sssd-nfs-idmap \
+zsh \ 
+-y
 RUN dnf clean all
 
-# Enable Cockpit
+# Enable Podman and Cockpit sockets
+RUN systemctl enable podman.socket
 RUN systemctl enable cockpit.socket
 RUN bootc container lint
 
-# This image combines a user-level quadlet for Nginx and a system-level quadlet for Pi-Hole in one image
-FROM base AS nginx
-COPY nginx/nginx.container /usr/share/containers/systemd
-COPY nginx/nginx.conf /etc/nginx
-COPY pihole/* /etc/containers/systemd
-# Disable systemd-resolved to not conflict on port 53 for pihole
-RUN systemctl disable systemd-resolved.service
-RUN bootc container lint
 
 FROM base AS observability
 WORKDIR /tmp
@@ -55,4 +48,13 @@ RUN curl -LO https://rpm.grafana.com/gpg.key && \
 RUN dnf install loki grafana -y
 COPY observability/loki/config.yml /etc/loki
 RUN systemctl enable loki.service
+RUN bootc container lint
+
+# This image builds on observaility and combines a user-level quadlet for Nginx and a system-level quadlet for Pi-Hole in one image
+FROM observability AS nginx
+COPY nginx/nginx.container /usr/share/containers/systemd
+COPY nginx/nginx.conf /etc/nginx
+COPY pihole/* /etc/containers/systemd
+# Disable systemd-resolved to not conflict on port 53 for pihole
+RUN systemctl disable systemd-resolved.service
 RUN bootc container lint

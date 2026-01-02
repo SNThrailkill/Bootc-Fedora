@@ -6,14 +6,14 @@
 // #### Metrics Configuration ####
 // ###############################
 
-// Host Cadvisor on the Docker socket to expose container metrics. This will work for Podman too.
+// Host Cadvisor on the podman socket to expose container metrics.
 prometheus.exporter.cadvisor "cadvisor" {
-  docker_host = "unix:///var/run/docker.sock"
-  storage_duration = "5m"
+  docker_host = "unix:///run/podman/podman.sock"
+  included_metrics = ["cpu", "memory", "network", "disk"]
 }
 
 // Configure a prometheus.scrape component to collect cadvisor metrics.
-prometheus.scrape "docker" {
+prometheus.scrape "podman" {
   targets    = prometheus.exporter.cadvisor.cadvisor.targets
   forward_to = [ prometheus.remote_write.local.receiver ]
 
@@ -27,11 +27,11 @@ prometheus.scrape "docker" {
 
 // Discover containers and extract metadata.
 discovery.docker "containers" {
-  host = "unix:///var/run/docker.sock"
+  host = "unix:///run/podman/podman.sock"
 }
 
 // Define a relabeling rule to create a service name from the container name.
-discovery.relabel "logs_integrations_docker" {
+discovery.relabel "logs_integrations_podman" {
       targets = []
   
       rule {
@@ -42,11 +42,11 @@ discovery.relabel "logs_integrations_docker" {
   }
 
 
-// Configure a loki.source.docker component to collect logs from Docker containers.
-loki.source.docker "docker" {
-  host       = "unix:///var/run/docker.sock"
+// Configure a loki.source.docker component to collect logs from podman containers.
+loki.source.docker "podman" {
+  host       = "unix:///run/podman/podman.sock"
   targets    = discovery.docker.containers.targets
-  labels     = {"platform" = "docker"}
-  relabel_rules = discovery.relabel.logs_integrations_docker.rules
+  labels     = {"platform" = "podman"}
+  relabel_rules = discovery.relabel.logs_integrations_podman.rules
   forward_to = [loki.write.local.receiver]
 }
