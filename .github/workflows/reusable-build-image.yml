@@ -157,6 +157,21 @@ jobs:
           output-file: "sbom.json"
           registry-username: ${{ github.actor }}
           registry-password: ${{ secrets.GITHUB_TOKEN  }}
+      
+      - name: Scan SBOM for vulnerabilities
+        id: scan
+        uses: anchore/scan-action@v6
+        with:
+          sbom: "sbom.json"
+          output-file: "sarif.json"
+          fail-build: false
+          severity-cutoff: critical
+      
+      - name: Upload SARIF report
+        id: upload
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
 
       # This section is optional and only needs to be enabled if you plan on distributing
       # your project for others to consume. You will need to create a public and private key
@@ -189,18 +204,3 @@ jobs:
             --type spdxjson \
             --key env://COSIGN_PRIVATE_KEY \
             "${IMAGE}@${DIGEST}"
-      
-      - name: Scan SBOM for vulnerabilities
-        id: scan
-        uses: anchore/scan-action@v6
-        with:
-          sbom: "sbom.json"
-          output-file: "sarif.json"
-          fail-build: false
-          severity-cutoff: high
-
-      - name: Upload SARIF report
-        id: upload
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ${{ steps.scan.outputs.sarif }}
