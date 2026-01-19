@@ -7,6 +7,17 @@ Wants=network-online.target
 Image=docker.io/grafana/alloy:latest
 Volume=/etc/alloy:/etc/alloy:Z
 Volume=/var/lib/alloy:/var/lib/alloy:Z
+Volume=/sys/fs/cgroup:/sys/fs/cgroup:ro
+Volume=/run/podman/podman.sock:/run/podman/podman.sock:ro
+# For container disk metrics (cAdvisor)
+Volume=/var/lib/containers/storage:/var/lib/containers/storage:ro
+# For hardware/disk metadata (Node Exporter)
+Volume=/run/udev:/run/udev:ro
+Environment=DOCKER_HOST=unix:///run/podman/podman.sock
+User=root
+AddCapability=CAP_SYS_ADMIN
+SecurityLabelDisable=true
+Network=host
 PublishPort=12345:12345
 Exec=run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy /etc/alloy
 
