@@ -199,6 +199,7 @@ jobs:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_TIMEOUT: 5m0s
         run: |
           cosign attest -y \
             --predicate ./sbom.json \
