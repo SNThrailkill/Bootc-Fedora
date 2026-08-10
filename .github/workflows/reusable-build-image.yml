@@ -185,9 +185,15 @@ jobs:
       - name: Sign container image
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
+          # Skip the public Rekor transparency log upload. The signature is
+          # stored in the OCI registry alongside the image, where it can be
+          # verified manually with `cosign verify --insecure-ignore-tlog=true`.
+          # Rekor (rekor.sigstore.dev) is a shared, intermittently-flaky
+          # service whose outages were failing this step; it isn't needed for
+          # the key-based signer.
           IMAGE_FULL="${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}"
           for tag in ${{ steps.metadata.outputs.tags }}; do
-            cosign sign -y --key env://COSIGN_PRIVATE_KEY $IMAGE_FULL:$tag
+            cosign sign -y --tlog-upload=false --key env://COSIGN_PRIVATE_KEY $IMAGE_FULL:$tag
           done
         env:
           TAGS: ${{ steps.push.outputs.digest }}
@@ -201,7 +207,14 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           COSIGN_TIMEOUT: 5m0s
         run: |
+          # Skip the public Rekor transparency log upload. The attestation is
+          # stored in the OCI registry alongside the image, where it can be
+          # verified manually with `cosign verify-attestation
+          # --insecure-ignore-tlog=true`. Rekor (rekor.sigstore.dev) is a
+          # shared, intermittently-flaky service whose outages were failing
+          # this step; it isn't needed for the key-based signer.
           cosign attest -y \
+            --tlog-upload=false \
             --predicate ./sbom.json \
             --type spdxjson \
             --key env://COSIGN_PRIVATE_KEY \

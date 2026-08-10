@@ -1,0 +1,23 @@
+# AGENTS.md — repository knowledge
+
+## CI/CD overview
+- Three GitHub Actions workflows in `.github/workflows/`:
+  - `build-images.yml` — top-level; triggers on PR/push/schedule (Sun 10:05 UTC) and fans out to per-image reusable workflow jobs: base, nginx, k3s, prometheus. (nas is commented out.)
+  - `reusable-build-image.yml` — the actual build/push/sign/attest logic. Buildah builds each target from `Containerfile`, pushes to GHCR (`ghcr.io/<owner>/<repo>/<image>`), generates an SBOM (anchore), scans it (anchore scan-action), uploads SARIF, signs with cosign (key-based, `SIGNING_SECRET`), then attaches an SBOM attestation with cosign.
+  - `build-artifact.yml` — manual/PR-triggered; turns a built bootc image into a disk artifact (ami/qcow2/vmdk/...) via bootc-image-builder.
+- There is also a `.gitlab-ci.yml`, but the active pipelines are GitHub Actions.
+- Containerfile build targets: `base`, `observability`, `prometheus`, `loki`, `nginx`, `k3s`, `nas`. See `Containerfile` for the stage graph.
+
+## Dependency management
+- **Renovate** is the dependency manager (see `renovate.json`). Configured to manage `github-actions` and `dockerfile` dependencies, grouped, with a Monday schedule and a dependency dashboard. Major docker base-image bumps require dashboard approval.
+- Dependabot was removed (its config had an empty `package-ecosystem` and would have conflicted with Renovate).
+- GitHub Actions are pinned by digest; Renovate keeps both digest and version tag up to date.
+
+## Known issue: Rekor (sigstore transparency log) flakiness
+- The public Rekor instance (`rekor.sigstore.dev`) is a shared service with a 99.5% SLO and is intermittently unavailable. Since cosign 2.0, `cosign sign` and `cosign attest` upload to it by default even for key-based signing, so a Rekor outage fails the pipeline with `Post "https://rekor.sigstore.dev/api/v1/log/entries": ... giving up after 4 attempt(s)`.
+- This is widely reported (sigstore/cosign#3602, GitHub community discussions#144833) and transient.
+- Fix applied in `reusable-build-image.yml`: both the `Sign container image` and `Add SBOM Attestation` steps always run with `--tlog-upload=false`. The signature/attestation is stored in the OCI registry alongside the image (where it can be verified manually); the public Rekor transparency-log entry is skipped entirely. This trades off the public audit record for a reliable build.
+- Verify images signed this way with `cosign verify --key cosign.pub --insecure-ignore-tlog=true ...` (and `cosign verify-attestation --insecure-ignore-tlog=true ...` for attestations).
+
+## Known issue: prometheus build target fails dnf install of loki/grafana
+- The `prometheus` Containerfile stage pulls the grafana yum repo and runs `dnf install loki grafana -y`, which failed with a Curl SSL CA cert error reaching `https://rpm.grafana.com/repodata/repomd.xml`. The grafana repo config points `sslcacert` at `/etc/pki/tls/certs/ca-bundle.crt`, which must exist/populated before dnf runs.

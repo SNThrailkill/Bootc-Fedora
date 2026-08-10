@@ -1,3 +1,43 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "schedule": [
+    "before 6am on Monday"
+  ],
+  "timezone": "America/Chicago",
+  "labels": [
+    "dependencies"
+  ],
+  "github-actions": {
+    "enabled": true,
+    "commitMessageAction": "Update",
+    "groupName": "github-actions"
+  },
+  "dockerfile": {
+    "enabled": true
+  },
+  "docker-compose": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    }
+  ]
 }
