@@ -1,8 +1,7 @@
 name: Build Bootc Artifact
 on:
-  pull_request:
-    branches:
-      - main
+  # Requires build_type/flavor inputs provided by workflow_dispatch; these do
+  # not exist for pull_request events, so only enable manual dispatch.
   workflow_dispatch:
     inputs:
       build_type:
