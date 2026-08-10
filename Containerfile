@@ -42,6 +42,15 @@ RUN tar -xvf prometheus-3.4.0.linux-amd64.tar.gz && \
     COPY observability/prometheus/prometheus.service /etc/systemd/system
     RUN systemctl enable prometheus
 # Install Loki
+# Refresh base packages and (re)extract the TLS CA bundle before adding the
+# grafana repo. dnf's librepo fails with curl error 77 ("error adding trust
+# anchors from file: /etc/pki/tls/certs/ca-bundle.crt") when that bundle is
+# missing/empty in the bootc build container. Updating ca-certificates runs its
+# %post (update-ca-trust), and we call update-ca-trust explicitly too so the
+# bundle is repopulated even when ca-certificates is already current. This must
+# run before the grafana repo is configured, otherwise dnf tries to refresh
+# grafana's repo metadata against the broken bundle and fails the same way.
+RUN dnf update -y && update-ca-trust
 RUN curl -LO https://rpm.grafana.com/gpg.key && \
     rpm --import gpg.key && \
     echo -e '[grafana]\nname=grafana\nbaseurl=https://rpm.grafana.com\nrepo_gpgcheck=0\nenabled=1\ngpgcheck=1\ngpgkey=https://rpm.grafana.com/gpg.key\nsslverify=1\nsslcacert=/etc/pki/tls/certs/ca-bundle.crt' | sudo tee /etc/yum.repos.d/grafana.repo
