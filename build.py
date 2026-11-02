@@ -93,7 +93,7 @@ IMAGES: Dict[str, Image] = {
         "nas",
         "nas",
         containerfile="nas/Containerfile",
-        description="CentOS Stream 9 NAS with OpenZFS (kernel-tracked)",
+        description="CentOS Stream 10 NAS with OpenZFS (kernel-tracked)",
         ci=True,
     ),
 }

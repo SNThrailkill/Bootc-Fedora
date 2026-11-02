@@ -10,8 +10,8 @@
 
 ## NAS image
 - `nas/Containerfile` is a three-stage build: `kernel-target` resolves the latest matching `kernel-devel`, `zfs-builder` compiles OpenZFS with DKMS against that exact kernel, and `nas` copies only the modules plus the userspace manifest.
-- `KMOD_KERNEL` is empty by default and tracks the CentOS Stream kernel; `pin-kernel.sh` uses `rpm.vercmp` and handles both downgrade and upgrade. `ZFS_VERSION=2.4.4` is pinned because stable EL9 ZFS 2.2.11 does not compile against the current 5.14.0-759 kernel; it comes from `zfs-testing`.
-- Stream 9 is intentional: the Stream 10 bootc base requires x86-64-v3, and this build host is x86-64-v2.
+- `KMOD_KERNEL` is empty by default and tracks the CentOS Stream kernel; `pin-kernel.sh` uses `rpm.vercmp` and handles both downgrade and upgrade. `ZFS_VERSION=2.4.4` is pinned; it comes from `zfs-testing` (EL10 has 2.4.4, and stable EL9 2.2.11 failed against the old 5.14 kernel).
+- Stream 10 is the default and requires x86-64-v3; pass `BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream9` for a v2 host. EL10 currently has `kernel-devel-6.12.0-279.el10` and OpenZFS 2.4.4 in `zfs-testing`; the Stream 10 image builds at ~1.82 GB with kernel 6.12.0-279.
 - Secure Boot is not handled: DKMS signs the module with an ephemeral key that is not enrolled. ZFS userspace is manifest-copied and not RPM-owned, so SBOM/package audits will not list it.
 
 ## Local builds

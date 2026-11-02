@@ -46,8 +46,9 @@ image table so the CLI and the matrix do not have to change shape.
 This image simply installs k3s on our base image. Meant to be used as either server or agent.
 
 ## NAS
-CentOS Stream 9 bootc image with OpenZFS. The ZFS kernel modules are compiled
-in a throwaway builder against the exact kernel the final image ships, and the
+CentOS Stream 10 bootc image with OpenZFS (Stream 9 remains available via
+`BASE_IMAGE` for x86-64-v2 hosts). The ZFS kernel modules are compiled in a
+throwaway builder against the exact kernel the final image ships, and the
 kernel is tracked from the CentOS Stream `kernel-devel` repo, so a base-image
 bump picks up the matching kernel automatically. Only the compiled modules and
 ZFS userspace cross into the final image; `dkms`, `gcc` and `kernel-devel` stay

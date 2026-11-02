@@ -1,28 +1,26 @@
 # syntax=docker/dockerfile:1
 
-# NAS bootc image: CentOS Stream 9 + OpenZFS, built with the multi-stage
+# NAS bootc image: CentOS Stream 10 + OpenZFS, built with the multi-stage
 # kernel-module pattern from andrew.dunn.dev/writing/multi-stage-kernel-modules.
 #
-# Why Stream 9 and not Stream 10:
-#   The Stream 10 bootc image is built for x86-64-v3.  This build host is
-#   x86-64-v2 (stream10's /bin/bash dies with "CPU does not support
-#   x86-64-v3"), so stream10 could not be built or tested here.  Check the NAS
-#   CPU before moving to Stream 10.  Stream 9 also has a 5.14 kernel with an
-#   OpenZFS 2.4.x build available in zfs-testing.  Moving to Stream 10 is a
-#   separate, hardware-visible decision.
+# Base image:
+#   The default is CentOS Stream 10, which requires an x86-64-v3 CPU. On a v2
+#   host, pass --build-arg BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream9;
+#   the EPEL and zfsonlinux repo URLs follow VERSION_ID, and both streams have
+#   OpenZFS 2.4.4 in zfs-testing.
 #
 # Kernel tracking:
 #   KMOD_KERNEL is empty by default.  The kernel-target stage queries the
 #   latest kernel-devel in the CentOS Stream repos and pins both the builder
 #   and the final image to it.  When Renovate or a manual rebuild pulls a new
-#   stream9 base image, the query follows the new kernel automatically; no
-#   version needs editing in this file.  Pass --build-arg KMOD_KERNEL=... to
-#   override (e.g. to reproduce an old image).
+#   base image, the query follows the new kernel automatically; no version
+#   needs editing in this file.  Pass --build-arg KMOD_KERNEL=... to override
+#   (e.g. to reproduce an old image).
 #
 # Build from the repository root:
 #   podman build -f nas/Containerfile -t nas .
 
-ARG BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream9
+ARG BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream10
 
 # ---------------------------------------------------------------------------
 # Stage 1: resolve the target kernel once, so the builder and final image

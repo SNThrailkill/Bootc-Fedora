@@ -1,6 +1,6 @@
-# NAS image (CentOS Stream 9 + OpenZFS)
+# NAS image (CentOS Stream 10 + OpenZFS)
 
-`nas/Containerfile` builds a CentOS Stream 9 bootc NAS with OpenZFS. The ZFS
+`nas/Containerfile` builds a CentOS Stream 10 bootc NAS with OpenZFS. The ZFS
 kernel modules are compiled in a throwaway builder against the exact kernel
 that ships in the final image, then only the modules and userspace files are
 copied forward.
@@ -28,20 +28,21 @@ either direction using `rpm.vercmp` (a string comparison breaks on RPM release
 fields), then verifies `kernel-core`.
 
 `KMOD_KERNEL` is empty by default: a base-image or Renovate bump triggers a
-fresh query. Pass `--build-arg KMOD_KERNEL=5.14.0-758.el9.x86_64` to reproduce
-an older image.
+fresh query. Pass `--build-arg KMOD_KERNEL=<kernel-version>` to reproduce an
+older image.
 
-## Why Stream 9 and zfs-testing
+## Stream 10 and zfs-testing
 
-- The Stream 10 bootc base requires x86-64-v3. The build host used for the
-  first validation is x86-64-v2, so Stream 10 could not be built or booted
-  there. Moving to Stream 10 is a separate, hardware-visible decision; check
-  the NAS CPU first.
-- Stable EL9 ZFS (`zfs-dkms-2.2.11`) does not compile against the current
-  `5.14.0-759` kernel: `struct dentry has no member named d_u`.
-- `zfs-testing` has OpenZFS 2.4.4, which builds cleanly and reports the correct
-  vermagic for `5.14.0-759.el9.x86_64`. The version is pinned as
-  `ZFS_VERSION=2.4.4` so a repo update cannot silently change it.
+- The default is Stream 10. Its userspace requires an x86-64-v3 CPU; on a v2
+  host pass `--build-arg BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream9`.
+  The EPEL and zfsonlinux repo URLs follow `VERSION_ID`, so both streams work
+  from the same Containerfile.
+- EL10 currently has `kernel-devel-6.12.0-279.el10` and OpenZFS 2.4.4 in
+  `zfs-testing` (verified). The version is pinned as `ZFS_VERSION=2.4.4` so a
+  repo update cannot silently change it.
+- The original Stream 9 validation used `5.14.0-759`; stable EL9 ZFS 2.2.11
+  does not compile against that kernel (`struct dentry` has no member `d_u`),
+  which is why 2.4.4 is pinned.
 - Renovate does not track `ZFS_VERSION` or `COCKPIT_ZFS_VERSION` today. If the
   testing repo removes that version, the build fails loudly; bump the ARG
   manually or add a custom manager.
@@ -61,7 +62,9 @@ pattern) instead of using the DKMS package.
 - No `dkms`, `gcc` or `kernel-devel`; those stay in the builder
 
 `bootc container lint` passes (11 passed, 1 skipped, 3 inherited warnings).
-The image is about 2.1 GB.
+The Stream 10 build used kernel `6.12.0-279.el10`, OpenZFS `2.4.4` and is
+about 1.82 GB; `dkms`, `gcc` and `kernel-devel` are absent. The original
+Stream 9 validation also passed (kernel `5.14.0-759`, 2.12 GB).
 
 ## Caveats
 
