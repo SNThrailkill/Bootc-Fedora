@@ -156,12 +156,67 @@ jobs:
           output-file: "sarif.json"
           fail-build: false
           severity-cutoff: critical
-      
+
+      # GitHub Code Scanning rejects a SARIF run with more than 25,000
+      # results. Grype emits every severity, and the CentOS Stream NAS SBOM
+      # produces ~41k; keep only error-level (high/critical) findings so the
+      # upload stays valid. The full report is still in the scan step log.
+      - name: Trim SARIF to high/critical findings
+        id: trim-sarif
+        env:
+          SARIF_IN: ${{ steps.scan.outputs.sarif }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          src = Path(os.environ.get("SARIF_IN") or "sarif.json")
+          dst = Path("sarif-filtered.json")
+          data = json.loads(src.read_text())
+
+          before = 0
+          kept = 0
+          rules_before = 0
+          rules_after = 0
+          for run in data.get("runs", []):
+              results = run.get("results", [])
+              before += len(results)
+              filtered = [r for r in results if r.get("level") == "error"]
+              run["results"] = filtered
+              kept += len(filtered)
+
+              driver = run.get("tool", {}).get("driver", {})
+              rules = driver.get("rules", [])
+              rules_before += len(rules)
+              if rules:
+                  kept_ids = {r.get("ruleId") for r in filtered if r.get("ruleId")}
+                  kept_rules = [rule for rule in rules if rule.get("id") in kept_ids]
+                  new_index = {rule.get("id"): i for i, rule in enumerate(kept_rules)}
+                  for result in filtered:
+                      index = new_index.get(result.get("ruleId"))
+                      if "ruleIndex" in result:
+                          if index is None:
+                              result.pop("ruleIndex", None)
+                          else:
+                              result["ruleIndex"] = index
+                  driver["rules"] = kept_rules
+                  rules_after += len(kept_rules)
+
+          dst.write_text(json.dumps(data))
+          print(
+              f"SARIF results: {before} -> {kept}; "
+              f"rules: {rules_before} -> {rules_after}"
+          )
+          if kept > 25000 or rules_after > 25000:
+              raise SystemExit("still over GitHub's 25000-result/rule limit")
+          PY
+
       - name: Upload SARIF report
         id: upload
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ steps.scan.outputs.sarif }}
+          sarif_file: sarif-filtered.json
 
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2

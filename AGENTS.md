@@ -2,11 +2,17 @@
 
 ## CI/CD overview
 - Three GitHub Actions workflows in `.github/workflows/`:
-  - `build-images.yml` — top-level; triggers on PR/push/schedule (Sun 10:05 UTC) and fans out to per-image reusable workflow jobs: base, nginx, k3s, prometheus. (nas is commented out.)
+  - `build-images.yml` — top-level; triggers on PR/push/schedule (Sun 10:05 UTC) and fans out to per-image reusable workflow jobs: base, nginx, k3s, prometheus, nas.
   - `reusable-build-image.yml` — the actual build/push/sign/attest logic. Buildah builds each target from `Containerfile`, pushes to GHCR (`ghcr.io/<owner>/<repo>/<image>`), generates an SBOM (anchore), scans it (anchore scan-action), uploads SARIF, signs with cosign (key-based, `SIGNING_SECRET`), then attaches an SBOM attestation with cosign.
   - `build-artifact.yml` — manual/PR-triggered; turns a built bootc image into a disk artifact (ami/qcow2/vmdk/...) via bootc-image-builder.
 - There is also a `.gitlab-ci.yml`, but the active pipelines are GitHub Actions.
 - Containerfile build targets: `base`, `observability`, `prometheus`, `loki`, `nginx`, `k3s`, `nas`. See `Containerfile` for the stage graph.
+
+## NAS image
+- `nas/Containerfile` is a three-stage build: `kernel-target` resolves the latest matching `kernel-devel`, `zfs-builder` compiles OpenZFS with DKMS against that exact kernel, and `nas` copies only the modules plus the userspace manifest.
+- `KMOD_KERNEL` is empty by default and tracks the CentOS Stream kernel; `pin-kernel.sh` uses `rpm.vercmp` and handles both downgrade and upgrade. `ZFS_VERSION=2.4.4` is pinned; it comes from `zfs-testing` (EL10 has 2.4.4, and stable EL9 2.2.11 failed against the old 5.14 kernel).
+- Stream 10 is the default and requires x86-64-v3; pass `BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream9` for a v2 host. EL10 currently has `kernel-devel-6.12.0-279.el10` and OpenZFS 2.4.4 in `zfs-testing`; the Stream 10 image builds at ~1.82 GB with kernel 6.12.0-279.
+- Secure Boot is not handled: DKMS signs the module with an ephemeral key that is not enrolled. ZFS userspace is manifest-copied and not RPM-owned, so SBOM/package audits will not list it.
 
 ## Local builds
 - `./build.py` is the local entry point and the single source of truth for the image table, Containerfile targets and the CI matrix. Subcommands: `doctor`, `images`, `build`, `shell`, `matrix`.
