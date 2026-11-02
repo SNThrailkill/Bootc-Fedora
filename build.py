@@ -93,8 +93,8 @@ IMAGES: Dict[str, Image] = {
         "nas",
         "nas",
         containerfile="nas/Containerfile",
-        description="WIP CentOS bootc NAS image",
-        ci=False,
+        description="CentOS Stream 9 NAS with OpenZFS (kernel-tracked)",
+        ci=True,
     ),
 }
 

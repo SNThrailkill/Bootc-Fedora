@@ -1,31 +1,140 @@
-FROM quay.io/centos-bootc/centos-bootc:stream9 AS nas
+# syntax=docker/dockerfile:1
 
+# NAS bootc image: CentOS Stream 9 + OpenZFS, built with the multi-stage
+# kernel-module pattern from andrew.dunn.dev/writing/multi-stage-kernel-modules.
+#
+# Why Stream 9 and not Stream 10:
+#   The Stream 10 bootc image is built for x86-64-v3.  This build host is
+#   x86-64-v2 (stream10's /bin/bash dies with "CPU does not support
+#   x86-64-v3"), so stream10 could not be built or tested here.  Check the NAS
+#   CPU before moving to Stream 10.  Stream 9 also has a 5.14 kernel with an
+#   OpenZFS 2.4.x build available in zfs-testing.  Moving to Stream 10 is a
+#   separate, hardware-visible decision.
+#
+# Kernel tracking:
+#   KMOD_KERNEL is empty by default.  The kernel-target stage queries the
+#   latest kernel-devel in the CentOS Stream repos and pins both the builder
+#   and the final image to it.  When Renovate or a manual rebuild pulls a new
+#   stream9 base image, the query follows the new kernel automatically; no
+#   version needs editing in this file.  Pass --build-arg KMOD_KERNEL=... to
+#   override (e.g. to reproduce an old image).
+#
+# Build from the repository root:
+#   podman build -f nas/Containerfile -t nas .
 
-# Enable the simple "automatic update containers" timer for both quadlets
+ARG BASE_IMAGE=quay.io/centos-bootc/centos-bootc:stream9
+
+# ---------------------------------------------------------------------------
+# Stage 1: resolve the target kernel once, so the builder and final image
+# cannot disagree if repo metadata moves during the build.
+# ---------------------------------------------------------------------------
+FROM ${BASE_IMAGE} AS kernel-target
+ARG KMOD_KERNEL=""
+
+RUN set -eux; \
+    if [ -z "${KMOD_KERNEL}" ]; then \
+        KMOD_KERNEL=$(dnf -q repoquery --available --latest-limit=1 \
+            --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-devel \
+            | grep "\.$(uname -m)$" | tail -1); \
+    fi; \
+    [ -n "${KMOD_KERNEL}" ] || { echo "FAIL: no kernel-devel found in repos" >&2; exit 1; }; \
+    echo "${KMOD_KERNEL}" > /kmod-kernel; \
+    echo "Target kernel: ${KMOD_KERNEL}"
+
+# ---------------------------------------------------------------------------
+# Stage 2: throwaway builder.  Everything installed here (dkms, gcc,
+# kernel-devel, the ZFS source tree) is discarded with this stage.
+# ---------------------------------------------------------------------------
+FROM ${BASE_IMAGE} AS zfs-builder
+ARG ZFS_VERSION=2.4.4
+ARG ZFS_RELEASE_VERSION=2-8
+
+COPY --from=kernel-target /kmod-kernel /kmod-kernel
+COPY nas/pin-kernel.sh /usr/local/libexec/pin-kernel.sh
+COPY nas/build-kmod-zfs.sh /usr/local/libexec/build-kmod-zfs.sh
+
+RUN set -eux; \
+    dnf config-manager --set-enabled crb; \
+    . /etc/os-release; \
+    EL_MAJOR="${VERSION_ID%%.*}"; \
+    dnf install -y --nodocs --setopt=install_weak_deps=False \
+        "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${EL_MAJOR}.noarch.rpm" \
+        "https://zfsonlinux.org/epel/zfs-release-${ZFS_RELEASE_VERSION}.el${EL_MAJOR}.noarch.rpm"; \
+    chmod +x /usr/local/libexec/pin-kernel.sh /usr/local/libexec/build-kmod-zfs.sh; \
+    KMOD_KERNEL=$(cat /kmod-kernel); \
+    /usr/local/libexec/pin-kernel.sh "${KMOD_KERNEL}"; \
+    /usr/local/libexec/build-kmod-zfs.sh "${KMOD_KERNEL}" "${ZFS_VERSION}"
+
+# ---------------------------------------------------------------------------
+# Stage 3: production NAS image.
+# ---------------------------------------------------------------------------
+FROM ${BASE_IMAGE} AS nas
+ARG COCKPIT_ZFS_VERSION=v1.3.1
+
+# Enable automatic bootc image updates.
 RUN systemctl enable podman-auto-update.timer
 
-# Install EPEL + base packages
-RUN dnf config-manager --set-enabled crb && dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm -y
-RUN dnf install curl git qemu-guest-agent \ 
-    cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
-    nfs-utils samba samba-usershares libnfsidmap sssd-nfs-idmap firewalld \
-    zsh \ 
-    -y
-RUN dnf install https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm -y
-RUN dnf clean all
+# Install EPEL + base packages.  The ZFS repository is intentionally NOT
+# installed in the final image: ZFS userspace arrives via the builder
+# manifest, so dnf has no reason to pull zfs-dkms (or dkms/gcc) at runtime.
+RUN set -eux; \
+    dnf config-manager --set-enabled crb; \
+    . /etc/os-release; \
+    EL_MAJOR="${VERSION_ID%%.*}"; \
+    dnf install -y --nodocs --setopt=install_weak_deps=False \
+        "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${EL_MAJOR}.noarch.rpm"; \
+    dnf install -y --nodocs --setopt=install_weak_deps=False \
+        curl git qemu-guest-agent \
+        cockpit-system cockpit-ws cockpit-files cockpit-networkmanager \
+        cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
+        nfs-utils samba samba-usershares libnfsidmap sssd-nfs-idmap firewalld \
+        zsh; \
+    dnf clean all
 
-# Enable Cockpit
-RUN systemctl enable cockpit.socket
+# Enable Cockpit, NFS and Samba to start on boot.
+RUN systemctl enable cockpit.socket nfs-server.service smb.service
 
-# Enable NFS and Samba to start on boot
-RUN systemctl enable nfs-server.service && systemctl enable smb.service
-
-# Setup Firewall Rules
+# Setup Firewall Rules.
 RUN firewall-offline-cmd --add-service=nfs && \
     firewall-offline-cmd --add-service=samba
 
-# Get ZFS manager for Cockpit and install 
-RUN git clone https://github.com/45drives/cockpit-zfs-manager.git && cp -r cockpit-zfs-manager/zfs /usr/share/cockpit
+# 45Drives Cockpit ZFS manager.  The cockpit-zfs-manager repository is
+# archived; pin its last release commit so the UI cannot drift.  The actively
+# maintained replacement (45Drives/cockpit-zfs) needs a Node build and
+# python3-libzfs, so it is deliberately out of scope here.
+RUN git clone --depth 1 --branch "${COCKPIT_ZFS_VERSION}" \
+        https://github.com/45Drives/cockpit-zfs-manager.git /tmp/cockpit-zfs-manager && \
+    install -d /usr/share/cockpit && \
+    cp -a /tmp/cockpit-zfs-manager/zfs /usr/share/cockpit/ && \
+    rm -rf /tmp/cockpit-zfs-manager
 
-RUN bootc container lint
+# Resolve the target kernel, then move the final image's kernel to it.  This
+# handles both the common "base image is newer than kernel-devel" direction
+# and the "base image is older than kernel-devel" direction.
+COPY --from=kernel-target /kmod-kernel /tmp/kmod-kernel
+COPY nas/pin-kernel.sh /usr/local/libexec/pin-kernel.sh
+COPY nas/install-zfs-userspace.sh /usr/local/libexec/install-zfs-userspace.sh
+RUN chmod +x /usr/local/libexec/pin-kernel.sh \
+                /usr/local/libexec/install-zfs-userspace.sh && \
+    /usr/local/libexec/pin-kernel.sh "$(cat /tmp/kmod-kernel)"
 
+# Only the modules for the target kernel, never the builder's kernel-devel
+# tree or its /usr/lib/modules/*/build symlinks.
+COPY --from=zfs-builder /zfs-output/modules/ /usr/lib/modules/
+COPY --from=zfs-builder /zfs-files.txt /tmp/zfs-files.txt
+
+# Copy the userspace files named by the builder's RPM manifest, register the
+# modules with depmod, and enable the ZFS services.  The builder root is a
+# bind mount, so none of its toolchain is written to the final image.
+RUN --mount=type=bind,from=zfs-builder,target=/tmp/zfs-builder-root \
+    KMOD_KERNEL=$(cat /tmp/kmod-kernel) && \
+    /usr/local/libexec/install-zfs-userspace.sh \
+        "${KMOD_KERNEL}" /tmp/zfs-files.txt /tmp/zfs-builder-root && \
+    rm -f /tmp/zfs-files.txt /tmp/kmod-kernel \
+          /usr/local/libexec/pin-kernel.sh \
+          /usr/local/libexec/install-zfs-userspace.sh
+
+# Structural validation.  install-zfs-userspace.sh already checked modinfo,
+# ldd, single-kernel and service enablement; lint is the final gate and runs
+# after the builder bind mount is gone.
+RUN bootc container lint --no-truncate
