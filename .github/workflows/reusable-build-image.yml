@@ -156,12 +156,45 @@ jobs:
           output-file: "sarif.json"
           fail-build: false
           severity-cutoff: critical
-      
+
+      # GitHub Code Scanning rejects a SARIF run with more than 25,000
+      # results. Grype emits every severity, and the CentOS Stream NAS SBOM
+      # produces ~41k; keep only error-level (high/critical) findings so the
+      # upload stays valid. The full report is still in the scan step log.
+      - name: Trim SARIF to high/critical findings
+        id: trim-sarif
+        env:
+          SARIF_IN: ${{ steps.scan.outputs.sarif }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          src = Path(os.environ.get("SARIF_IN") or "sarif.json")
+          dst = Path("sarif-filtered.json")
+          data = json.loads(src.read_text())
+
+          before = 0
+          kept = 0
+          for run in data.get("runs", []):
+              results = run.get("results", [])
+              before += len(results)
+              filtered = [r for r in results if r.get("level") == "error"]
+              run["results"] = filtered
+              kept += len(filtered)
+
+          dst.write_text(json.dumps(data))
+          print(f"SARIF results: {before} -> {kept} (error/high+critical only)")
+          if kept > 25000:
+              raise SystemExit("still over GitHub's 25000-result limit")
+          PY
+
       - name: Upload SARIF report
         id: upload
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ${{ steps.scan.outputs.sarif }}
+          sarif_file: sarif-filtered.json
 
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
