@@ -11,6 +11,37 @@ The GitHub Actions and Containerfile has support for private registry/repository
 
 The GitHub Actions also will create a [SBOM](https://anchore.com/sbom/what-is-an-sbom/) of your image using [Syft](https://github.com/anchore/syft/), run a vulnerbility scan using [Grype](https://github.com/anchore/grype/), and upload the report to your Code Scanning page in the Security center of your repository. This will only work if your repo has Code Scanning enabled for your repository. [See the GitHub docs](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) for which repos can enable this.
 
+## Build locally
+
+The examples build with podman (or docker) and Python 3.9+. `build.py` is the
+single source of truth for the image list, so the same commands run locally and
+in CI. `just` recipes are a convenience wrapper.
+
+```bash
+./build.py doctor
+./build.py images
+./build.py build --image nginx --tag demo
+./build.py shell --image nginx --tag demo
+```
+
+`./build.py matrix` prints the image matrix as JSON. The GitHub Actions workflow
+still lists its jobs explicitly for now; the matrix is the hand-off point for
+the CI port.
+
+### Sealed images (next)
+
+The sealed variants (UKI + composefs + fs-verity + Secure Boot) are being ported
+into this example next. `build.py` already reserves the sealed fields in the
+image table so the CLI and the matrix do not have to change shape.
+
+- Demo keys will be generated locally under `target/keys/` and are gitignored.
+  Never commit `db.key`.
+- In CI, add the db private key as a secret:
+  - GitHub Actions: the `SECUREBOOT_DB_KEY` repository secret.
+  - GitLab CI: a `SECUREBOOT_DB_KEY` masked and protected CI/CD variable.
+- The public certificate (`keys/db.crt`) and UEFI enrollment blobs are safe to
+  commit; the private key is not.
+
 ## K3S
 This image simply installs k3s on our base image. Meant to be used as either server or agent.
 

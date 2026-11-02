@@ -1,2 +1,5 @@
 output
 cosign.key
+target/
+out/
+__pycache__/
