@@ -71,7 +71,16 @@ echo "PASS: single kernel directory ${K_VRA}"
 
 modinfo -k "${K_VRA}" zfs > /dev/null
 echo "PASS: zfs module $(modinfo -k "${K_VRA}" -F version zfs) for ${K_VRA}"
-zfs --version
+
+# `zfs --version` queries the loaded kernel module via zfs_version_kernel().
+# Build containers have no /dev/zfs, so only run it when the module is visible
+# (for example on a host that already has ZFS loaded). The modinfo check above
+# is the build-time proof that the module exists.
+if [ -e /sys/module/zfs ]; then
+    zfs --version
+else
+    echo "PASS: zfs userspace present (module not loaded in the build)"
+fi
 
 for bin in zfs zpool zed; do
     command -v "${bin}" > /dev/null
