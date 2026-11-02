@@ -177,6 +177,8 @@ jobs:
 
           before = 0
           kept = 0
+          rules_before = 0
+          rules_after = 0
           for run in data.get("runs", []):
               results = run.get("results", [])
               before += len(results)
@@ -184,10 +186,30 @@ jobs:
               run["results"] = filtered
               kept += len(filtered)
 
+              driver = run.get("tool", {}).get("driver", {})
+              rules = driver.get("rules", [])
+              rules_before += len(rules)
+              if rules:
+                  kept_ids = {r.get("ruleId") for r in filtered if r.get("ruleId")}
+                  kept_rules = [rule for rule in rules if rule.get("id") in kept_ids]
+                  new_index = {rule.get("id"): i for i, rule in enumerate(kept_rules)}
+                  for result in filtered:
+                      index = new_index.get(result.get("ruleId"))
+                      if "ruleIndex" in result:
+                          if index is None:
+                              result.pop("ruleIndex", None)
+                          else:
+                              result["ruleIndex"] = index
+                  driver["rules"] = kept_rules
+                  rules_after += len(kept_rules)
+
           dst.write_text(json.dumps(data))
-          print(f"SARIF results: {before} -> {kept} (error/high+critical only)")
-          if kept > 25000:
-              raise SystemExit("still over GitHub's 25000-result limit")
+          print(
+              f"SARIF results: {before} -> {kept}; "
+              f"rules: {rules_before} -> {rules_after}"
+          )
+          if kept > 25000 or rules_after > 25000:
+              raise SystemExit("still over GitHub's 25000-result/rule limit")
           PY
 
       - name: Upload SARIF report
