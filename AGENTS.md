@@ -8,6 +8,11 @@
 - There is also a `.gitlab-ci.yml`, but the active pipelines are GitHub Actions.
 - Containerfile build targets: `base`, `observability`, `prometheus`, `loki`, `nginx`, `k3s`, `nas`. See `Containerfile` for the stage graph.
 
+## Local builds
+- `./build.py` is the local entry point and the single source of truth for the image table, Containerfile targets and the CI matrix. Subcommands: `doctor`, `images`, `build`, `shell`, `matrix`.
+- `Justfile` recipes (`just doctor`, `just build nginx demo`, `just test`) wrap the same commands.
+- Sealed-image metadata is reserved in the table (`sealed_from`, `requires_keys`); the seal chain is stage 2. Demo keys live in `target/keys/` (gitignored). Real keys go to the `SECUREBOOT_DB_KEY` secret; never commit `db.key`.
+
 ## Dependency management
 - **Renovate** is the dependency manager (see `renovate.json`). Configured to manage `github-actions` and `dockerfile` dependencies, grouped, with a Monday schedule and a dependency dashboard. Major docker base-image bumps require dashboard approval.
 - Dependabot was removed (its config had an empty `package-ecosystem` and would have conflicted with Renovate).
