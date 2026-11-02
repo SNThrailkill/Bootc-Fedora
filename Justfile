@@ -25,16 +25,23 @@ shell image="base" tag="demo":
 matrix:
     ./build.py matrix
 
+# Generate an ephemeral demo Secure Boot key hierarchy in target/keys
+keygen:
+    ./build.py keygen --demo
+
+# Build the sealed demo image (requires keygen first)
+seal image="nginx-sealed" tag="demo":
+    ./build.py seal --image {{image}} --tag {{tag}}
+
+# Inspect the signed UKI, cmdline digest and sealed config
+verify image="nginx-sealed" tag="demo":
+    ./build.py verify --image {{image}} --tag {{tag}}
+
 # Golden tests for the image table and matrix shape
 test:
     python3 -m unittest discover -s tests -v
 
-# Sealed images are stage 2. The commands will be:
-#   ./build.py keygen --demo
-#   ./build.py seal --image nginx
-#   ./build.py verify --image nginx
-#
-# Demo keys live in target/keys/ and are gitignored. Never commit db.key.
-# In CI, add the db private key as a secret:
+# Sealed images are stage 2. Demo keys live in target/keys/ and are gitignored.
+# Never commit db.key. In CI, add the db private key as a secret:
 #   GitHub Actions: SECUREBOOT_DB_KEY repository secret
 #   GitLab CI:      SECUREBOOT_DB_KEY masked + protected CI/CD variable

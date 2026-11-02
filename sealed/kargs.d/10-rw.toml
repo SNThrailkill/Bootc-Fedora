@@ -1,0 +1,3 @@
+# Mount the composefs overlay root read-write (upper is tmpfs/transient or
+# the state dir depending on setup-root-conf; required for normal boot).
+kargs = ["rw"]
