@@ -1,5 +1,17 @@
 FROM ghcr.io/snthrailkill/bootc-fedora/base:latest AS k3s
-RUN curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true sh -
+
+# Pin the k3s version. Without INSTALL_K3S_VERSION the installer queries
+# https://update.k3s.io/v1-release/channels/stable to resolve the latest
+# release, and that host is unreachable from the GitHub runners (the build
+# fails after a ~76s connect timeout). Pinning also makes the image
+# reproducible; bump this deliberately.
+ARG K3S_VERSION=v1.36.5+k3s1
+RUN curl -sfL https://get.k3s.io | \
+    INSTALL_K3S_VERSION="${K3S_VERSION}" \
+    INSTALL_K3S_SKIP_ENABLE=true \
+    INSTALL_K3S_SKIP_SELINUX_RPM=true \
+    INSTALL_K3S_SELINUX_WARN=true \
+    sh -
 RUN systemctl enable k3s.service iscsid.service
 RUN systemctl disable bootc-fetch-apply-updates.timer # We DONT want k3s to reboot automatically on updates
 RUN bootc container lint
