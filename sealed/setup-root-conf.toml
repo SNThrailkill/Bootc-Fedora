@@ -1,0 +1,13 @@
+# composefs-native root mount configuration (bootc-setup-root-conf.toml(5)).
+#
+# Shipping this file is what marks the image as built for the composefs
+# backend (bootc auto-selects it, in addition to UKI detection), and it is the
+# config the initramfs's /usr/lib/bootc/initramfs-setup reads by default
+# (--config /usr/lib/composefs/setup-root-conf.toml) when booting with
+# `composefs=` on the kernel command line.
+#
+# Defaults are used for everything not set here:
+#   [root] transient = false
+#   [etc]  mount = "bind"
+#   [var]  mount = "bind"
+# The file may be empty; keep it explicit and documented instead.

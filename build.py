@@ -23,6 +23,9 @@ Usage:
     ./build.py images
     ./build.py build --image nginx --tag demo
     ./build.py shell --image nginx --tag demo
+    ./build.py keygen --demo
+    ./build.py seal --image nginx-sealed --tag demo
+    ./build.py verify --image nginx-sealed --tag demo
     ./build.py matrix | jq
 """
 
@@ -42,6 +45,7 @@ from typing import Dict, List, NoReturn, Optional
 ROOT = Path(__file__).resolve().parent
 LOCAL_REGISTRY = "localhost"
 DEFAULT_TAG = "latest"
+DEFAULT_KEY_DIR = ROOT / "target" / "keys"
 
 
 @dataclass(frozen=True)
@@ -96,6 +100,19 @@ IMAGES: Dict[str, Image] = {
         description="CentOS Stream 10 NAS with OpenZFS (kernel-tracked)",
         ci=True,
     ),
+    # Stage 2 demo: seal an existing content stage with a local demo key.
+    # `seal` passes --build-arg SEALED_FROM=<sealed_from> and mounts db.key /
+    # db.crt as podman secrets. Add more entries the same way; CI stays out
+    # until the sealed pipeline is wired.
+    "nginx-sealed": Image(
+        "nginx-sealed",
+        "sealed",
+        description="nginx sealed with UKI + composefs + fs-verity (demo keys)",
+        ci=False,
+        sealed_from="nginx",
+        sealed_target="sealed",
+        requires_keys=True,
+    ),
 }
 
 # Stage 2 will add entries like:
@@ -143,6 +160,40 @@ def require_container_mgr(explicit: Optional[str]) -> str:
 
 def local_tag(image: str, tag: str) -> str:
     return f"{LOCAL_REGISTRY}/{image}:{tag}"
+
+
+def resolve_key_dir(value: Optional[str]) -> Path:
+    path = Path(value).expanduser() if value else DEFAULT_KEY_DIR
+    if not path.is_absolute():
+        path = ROOT / path
+    return path.resolve()
+
+
+def require_keys(directory: Path) -> None:
+    missing = [
+        directory / name
+        for name in ("db.key", "db.crt")
+        if not (directory / name).is_file()
+    ]
+    if missing:
+        die(
+            "missing "
+            + ", ".join(str(path) for path in missing)
+            + "; run ./build.py keygen --demo first"
+        )
+
+
+def ensure_image(manager: str, ref: str, image_name: str, build_command: str, tag: str) -> None:
+    probe = subprocess.run(
+        [manager, "image", "inspect", ref],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if probe.returncode != 0:
+        die(
+            f"{ref} not found; run ./build.py {build_command} --image "
+            f"{image_name} --tag {tag}"
+        )
 
 
 def matrix_include() -> List[dict]:
@@ -195,18 +246,23 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         else "/dev/fuse: missing (needed for sealed images, stage 2)"
     )
 
-    key_dir = ROOT / "target" / "keys"
+    key_dir = DEFAULT_KEY_DIR
     if (key_dir / "db.key").exists():
         log(f"demo keys: found in {key_dir.relative_to(ROOT)} (keep out of git)")
     else:
         log(
-            "demo keys: not present; stage 2 will generate them in "
-            f"{key_dir.relative_to(ROOT)}"
+            "demo keys: not present; run ./build.py keygen --demo "
+            f"(writes {key_dir.relative_to(ROOT)})"
         )
 
     log("")
     log(f"Stage 1 (local content builds): {'ready' if ok else 'not ready'}")
-    log("Stage 2 (sealed images): next; needs /dev/fuse and demo keys")
+    stage2 = ok and fuse.exists()
+    log(
+        "Stage 2 (sealed demo): "
+        + ("ready" if stage2 else "not ready")
+        + "; run ./build.py keygen --demo, then ./build.py seal --image nginx-sealed"
+    )
     return 0 if ok else 1
 
 
@@ -242,8 +298,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         die(f"unknown image '{args.image}'; run ./build.py images")
     if image.requires_keys:
         die(
-            "sealed builds are not wired yet; stage 2 adds ./build.py seal "
-            "(see README.md)"
+            "this is a sealed image; use ./build.py seal --image "
+            f"{image.name} --tag {args.tag}"
         )
 
     containerfile = ROOT / image.containerfile
@@ -283,19 +339,161 @@ def cmd_shell(args: argparse.Namespace) -> int:
 
     ref = local_tag(image.name, args.tag)
     if not args.dry_run:
-        probe = subprocess.run(
-            [manager, "image", "inspect", ref],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if probe.returncode != 0:
-            die(
-                f"{ref} not found; run ./build.py build --image {image.name} "
-                f"--tag {args.tag}"
-            )
+        ensure_image(manager, ref, image.name, "build", args.tag)
 
     return run_command(
         [manager, "run", "--rm", "-it", "--entrypoint", "/bin/bash", ref],
+        args.dry_run,
+    )
+
+
+def cmd_keygen(args: argparse.Namespace) -> int:
+    if not args.demo:
+        die(
+            "keygen only creates an ephemeral demo hierarchy; pass --demo. "
+            "For a real hierarchy, run keys/util/keygen.sh directly."
+        )
+
+    directory = resolve_key_dir(args.key_dir)
+    script = ROOT / "keys" / "util" / "keygen.sh"
+    if not script.is_file():
+        die(f"keygen script not found: {script.relative_to(ROOT)}")
+
+    code = run_command(["bash", str(script), str(directory)], args.dry_run)
+    if code != 0:
+        return code
+
+    auth_dir = ROOT / "keys" / "auth" / "auto"
+    if not args.dry_run:
+        auth_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.with_auth:
+        manager = require_container_mgr(args.container_mgr)
+        if manager == "buildah":
+            die("buildah cannot run the enrollment container; use podman or docker")
+        try:
+            relative_keys = directory.relative_to(ROOT)
+        except ValueError:
+            die("--key-dir must be inside the repository when using --with-auth")
+        code = run_command(
+            [
+                manager,
+                "run",
+                "--rm",
+                "-v",
+                f"{ROOT}:/work:z",
+                "-w",
+                "/work",
+                "-e",
+                f"KEYS_DIR={relative_keys}",
+                "-e",
+                "OUT_DIR=keys/auth/auto",
+                "quay.io/fedora/fedora:44",
+                "bash",
+                "-c",
+                "dnf -y install sbsigntools >/dev/null && ./keys/util/gen-auth.sh",
+            ],
+            args.dry_run,
+        )
+        if code != 0:
+            return code
+
+    if not args.dry_run:
+        log(f"demo keys in {directory} (never commit *.key)")
+        log("CI: set SECUREBOOT_DB_KEY to the contents of db.key")
+        if not args.with_auth:
+            log(
+                "no enrollment blobs generated; pass --with-auth before a "
+                "Secure Boot VM boot"
+            )
+    return 0
+
+
+def cmd_seal(args: argparse.Namespace) -> int:
+    image = IMAGES.get(args.image)
+    if not image or not image.sealed_from or not image.sealed_target:
+        die("choose a sealed image; run ./build.py images")
+
+    manager = require_container_mgr(args.container_mgr)
+    if manager != "podman":
+        die(
+            "sealed builds currently require podman (the build needs "
+            "--device /dev/fuse, --cap-add=all and an SELinux label)"
+        )
+
+    containerfile = ROOT / image.containerfile
+    if not containerfile.is_file():
+        die(f"Containerfile not found: {image.containerfile}")
+
+    if not args.dry_run:
+        if not Path("/dev/fuse").exists():
+            die("/dev/fuse is missing; sealed builds need fuse (see ./build.py doctor)")
+        require_keys(resolve_key_dir(args.key_dir))
+
+    directory = resolve_key_dir(args.key_dir)
+    ref = local_tag(image.name, args.tag)
+    cmd = [
+        manager,
+        "build",
+        "--device",
+        "/dev/fuse",
+        "--cap-add=all",
+        "--security-opt=label=type:container_runtime_t",
+        "-f",
+        str(ROOT / image.containerfile),
+        "--target",
+        image.sealed_target,
+        "--build-arg",
+        f"SEALED_FROM={image.sealed_from}",
+        "--secret",
+        f"id=secureboot_key,src={directory / 'db.key'}",
+        "--secret",
+        f"id=secureboot_cert,src={directory / 'db.crt'}",
+        "-t",
+        ref,
+    ]
+    if args.pull:
+        cmd.insert(2, "--pull=always")
+    cmd.append(str(ROOT))
+
+    code = run_command(cmd, args.dry_run)
+    if code == 0 and not args.dry_run:
+        log(f"sealed {ref}")
+        log(
+            "verify with: ./build.py verify --image "
+            f"{image.name} --tag {args.tag}"
+        )
+    return code
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    image = IMAGES.get(args.image)
+    if not image or not image.requires_keys:
+        die("choose a sealed image; run ./build.py images")
+
+    manager = require_container_mgr(args.container_mgr)
+    if manager == "buildah":
+        die("buildah cannot run images; use podman or docker")
+
+    ref = local_tag(image.name, args.tag)
+    if not args.dry_run:
+        ensure_image(manager, ref, image.name, "seal", args.tag)
+
+    script = r"""
+set -eux
+kver=$(ls /usr/lib/modules)
+ls -lh /boot/EFI/Linux/
+sbverify --list "/boot/EFI/Linux/${kver}.efi"
+sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
+bootc --version
+rpm -q bootc
+test -f /usr/lib/bootc/install/00-ext4-default.toml
+test -f /usr/lib/composefs/setup-root-conf.toml
+""".strip()
+
+    return run_command(
+        [manager, "run", "--rm", "--entrypoint", "/bin/bash", ref, "-c", script],
         args.dry_run,
     )
 
@@ -335,6 +533,40 @@ def build_parser() -> argparse.ArgumentParser:
     shell.add_argument("--container-mgr", choices=("podman", "docker", "buildah"))
     shell.add_argument("--dry-run", action="store_true")
     shell.set_defaults(func=cmd_shell)
+
+    keygen = sub.add_parser(
+        "keygen", help="generate an ephemeral demo Secure Boot key hierarchy"
+    )
+    keygen.add_argument(
+        "--demo",
+        action="store_true",
+        help="required: create demo keys under target/keys (never commit them)",
+    )
+    keygen.add_argument("--key-dir", help="key directory (default: target/keys)")
+    keygen.add_argument(
+        "--with-auth",
+        action="store_true",
+        help="also generate UEFI .auth enrollment blobs in a container",
+    )
+    keygen.add_argument("--container-mgr", choices=("podman", "docker", "buildah"))
+    keygen.add_argument("--dry-run", action="store_true")
+    keygen.set_defaults(func=cmd_keygen)
+
+    seal = sub.add_parser("seal", help="build a sealed image with demo keys")
+    seal.add_argument("--image", default="nginx-sealed", choices=sorted(IMAGES))
+    seal.add_argument("--tag", default=DEFAULT_TAG)
+    seal.add_argument("--key-dir", help="key directory (default: target/keys)")
+    seal.add_argument("--container-mgr", choices=("podman", "docker", "buildah"))
+    seal.add_argument("--pull", action="store_true", help="always pull the base image")
+    seal.add_argument("--dry-run", action="store_true", help="print the command only")
+    seal.set_defaults(func=cmd_seal)
+
+    verify = sub.add_parser("verify", help="inspect a sealed image's UKI and config")
+    verify.add_argument("--image", default="nginx-sealed", choices=sorted(IMAGES))
+    verify.add_argument("--tag", default=DEFAULT_TAG)
+    verify.add_argument("--container-mgr", choices=("podman", "docker", "buildah"))
+    verify.add_argument("--dry-run", action="store_true")
+    verify.set_defaults(func=cmd_verify)
 
     matrix = sub.add_parser("matrix", help="print the CI image matrix as JSON")
     matrix.set_defaults(func=cmd_matrix)

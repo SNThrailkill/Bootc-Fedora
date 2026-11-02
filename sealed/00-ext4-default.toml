@@ -1,0 +1,4 @@
+# Sealed images require fs-verity on the root filesystem; XFS lacks it.
+# Picked up by `bootc install` from the image (bootc-install-config(5)).
+[install.filesystem.root]
+type = "ext4"

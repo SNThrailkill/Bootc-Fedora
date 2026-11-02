@@ -1,0 +1,6 @@
+# Consoles for Proxmox/OVMF guests: tty0 for the noVNC VGA console, ttyS0
+# for `qm terminal` / serial0. Baked into the signed UKI cmdline by
+# `bootc container ukify` (install-time --karg is rejected for UKI installs;
+# per-machine overrides must use UKI addons, see docs/sealed.md).
+kargs = ["console=tty0", "console=ttyS0,115200n8"]
+match-architectures = ["x86_64"]

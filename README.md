@@ -28,19 +28,30 @@ in CI. `just` recipes are a convenience wrapper.
 still lists its jobs explicitly for now; the matrix is the hand-off point for
 the CI port.
 
-### Sealed images (next)
+### Sealed images (demo)
 
-The sealed variants (UKI + composefs + fs-verity + Secure Boot) are being ported
-into this example next. `build.py` already reserves the sealed fields in the
-image table so the CLI and the matrix do not have to change shape.
+The `sealed` target builds a content stage with a signed UKI, a composefs root
+and fs-verity. The demo uses a throwaway key hierarchy so attendees do not need
+to manage Secure Boot keys:
 
-- Demo keys will be generated locally under `target/keys/` and are gitignored.
-  Never commit `db.key`.
-- In CI, add the db private key as a secret:
-  - GitHub Actions: the `SECUREBOOT_DB_KEY` repository secret.
-  - GitLab CI: a `SECUREBOOT_DB_KEY` masked and protected CI/CD variable.
-- The public certificate (`keys/db.crt`) and UEFI enrollment blobs are safe to
-  commit; the private key is not.
+```bash
+./build.py keygen --demo
+./build.py seal --image nginx-sealed --tag demo
+./build.py verify --image nginx-sealed --tag demo
+```
+
+`keygen --demo` writes `target/keys/` (gitignored). Never commit `db.key`. For
+a Secure Boot VM boot, add `--with-auth` to generate the UEFI enrollment blobs
+as well.
+
+- In CI, add the db private key as `SECUREBOOT_DB_KEY`: a GitHub Actions
+  repository secret, or a masked/protected GitLab CI/CD variable.
+- The public certificate (`keys/db.crt`) and the `.auth` enrollment blobs are
+  safe to commit; the private key is not.
+- The default sealed variant is `SEALED_FROM=observability`; the `nginx-sealed`
+  entry in `build.py` uses `SEALED_FROM=nginx`.
+
+See [docs/sealed.md](docs/sealed.md) for the chain and the demo runbook.
 
 ## K3S
 This image simply installs k3s on our base image. Meant to be used as either server or agent.

@@ -3,3 +3,4 @@ cosign.key
 target/
 out/
 __pycache__/
+keys/auth/auto/*.auth
