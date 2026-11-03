@@ -26,13 +26,13 @@ jobs:
     permissions:
       contents: read
     outputs:
-      include: ${{ steps.matrix.outputs.include }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build matrix from build.py
         id: matrix
-        run: echo "include=$(./build.py matrix --compact)" >> "$GITHUB_OUTPUT"
+        run: echo "matrix=$(./build.py matrix --compact)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.image }}
@@ -41,8 +41,7 @@ jobs:
     secrets: inherit
     strategy:
       fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
     with:
       build_target: ${{ matrix.build_target }}
       containerfile: ${{ matrix.containerfile }}
