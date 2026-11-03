@@ -44,13 +44,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Workaround bug where capital letters in your GitHub username make it impossible to push to GHCR.
       # https://github.com/macbre/push-to-ghcr/issues/12
       - name: Lowercase Registry
         id: registry_case
-        uses: ASzc/change-string-case-action@d0603cd0a7dd490be678164909f65c7737470a7f # v6
+        uses: ASzc/change-string-case-action@ecd1412d078f2e06e9eedcbaa6fcd988151c3f82 # v8
         with:
           string: ${{ env.IMAGE_REGISTRY }}
 
@@ -61,15 +61,20 @@ jobs:
       #     remove-codeql: true
 
       - name: Login to GitHub Container Registry
-        uses: redhat-actions/podman-login@v1
+        uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # This action is archived upstream and has no release with the Node 24
+      # runtime; pin its final main commit, which only adds the deprecation
+      # notice and switches runs.using from node20 to node24. The maintained
+      # replacement (osbuild/image-builder-action) has a different input model
+      # and needs a separate migration.
       - name: Build bootable image using bootc-image-builder
         id: build
-        uses: osbuild/bootc-image-builder-action@main
+        uses: osbuild/bootc-image-builder-action@028e4d28330efe546229eb9cb52aee78174d2347 # main (node24; archived)
         with:
           image: ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
           types: ${{ github.event.inputs.build_type }}
@@ -78,7 +83,7 @@ jobs:
           additional-args: --use-librepo=True
 
       - name: Upload Bootable Image Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bootc-image-${{ github.event.inputs.build_type }}
           path: ${{ github.workspace }}/output/*

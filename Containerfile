@@ -36,13 +36,14 @@ RUN mkdir /var/lib/alloy
 RUN bootc container lint
 
 FROM observability AS prometheus
+ARG PROMETHEUS_VERSION=3.4.0
 WORKDIR /tmp
 # Install Prometheus with standalone binary
-RUN curl -OL https://github.com/prometheus/prometheus/releases/download/v3.4.0/prometheus-3.4.0.linux-amd64.tar.gz
-RUN tar -xvf prometheus-3.4.0.linux-amd64.tar.gz && \
+RUN curl -OL https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz
+RUN tar -xvf prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz && \
     mkdir /etc/prometheus && \
-    mv prometheus-3.4.0.linux-amd64/prometheus /usr/local/bin/ && \
-    mv prometheus-3.4.0.linux-amd64/promtool /usr/local/bin/
+    mv prometheus-${PROMETHEUS_VERSION}.linux-amd64/prometheus /usr/local/bin/ && \
+    mv prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool /usr/local/bin/
     COPY observability/prometheus/prometheus.yml /etc/prometheus
     COPY observability/prometheus/prometheus.service /etc/systemd/system
     RUN systemctl enable prometheus
