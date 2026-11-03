@@ -9,8 +9,8 @@ Containerfile targets and the CI matrix. Add new images here; both local builds
 and the GitHub Actions workflow use the table (the workflow runs
 ``./build.py matrix`` to fan out its jobs).
 
-Sealed variants add ``sealed_from`` and ``requires_keys``. The db private key
-is never committed:
+Sealed variants set ``requires_keys`` and build the ``sealed`` Containerfile
+target. The db private key is never committed:
 
 * local demo: generated under ``target/keys/`` (gitignored)
 * GitHub Actions: repository secret ``SECUREBOOT_DB_KEY``
@@ -62,8 +62,6 @@ class Image:
     image_name: Optional[str] = None
     # Publish only this tag for the image (used by sealed variants).
     tag_override: Optional[str] = None
-    sealed_from: Optional[str] = None
-    sealed_target: Optional[str] = None
     requires_keys: bool = False
 
 
@@ -105,17 +103,15 @@ IMAGES: Dict[str, Image] = {
         description="CentOS Stream 10 NAS with OpenZFS (kernel-tracked)",
         ci=True,
     ),
-    # Sealed demo: seal the nginx content stage with the repository Secure
-    # Boot key hierarchy. CI publishes this as nginx:sealed; the image table
-    # carries the sealed flag and tag override into the CI matrix.
+    # Sealed demo: build the nginx content stage and seal it with the
+    # repository Secure Boot key hierarchy. CI publishes this as nginx:sealed;
+    # the image table carries the sealed flag and tag override into the matrix.
     "nginx-sealed": Image(
         "nginx-sealed",
         "sealed",
         description="nginx sealed with UKI + composefs + fs-verity",
         image_name="nginx",
         tag_override="sealed",
-        sealed_from="nginx",
-        sealed_target="sealed",
         requires_keys=True,
     ),
 }
@@ -218,11 +214,6 @@ def matrix_include() -> List[dict]:
                 "tag_override": image.tag_override or "",
                 "sealed": sealed,
                 "oci": sealed,
-                "build_args": (
-                    f"SEALED_FROM={image.sealed_from}"
-                    if sealed and image.sealed_from
-                    else ""
-                ),
             }
         )
     return include
@@ -291,7 +282,7 @@ def cmd_images(args: argparse.Namespace) -> int:
         return 0
 
     rows = [
-        ("NAME", "TARGET", "CONTAINERFILE", "CI", "SEALED", "DESCRIPTION"),
+        ("NAME", "TARGET", "CONTAINERFILE", "CI", "KEYS", "DESCRIPTION"),
     ]
     for image in IMAGES.values():
         rows.append(
@@ -300,7 +291,7 @@ def cmd_images(args: argparse.Namespace) -> int:
                 image.target,
                 image.containerfile,
                 "yes" if image.ci else "no",
-                image.sealed_from or "-",
+                "yes" if image.requires_keys else "-",
                 image.description,
             )
         )
@@ -442,7 +433,7 @@ def cmd_keygen(args: argparse.Namespace) -> int:
 
 def cmd_seal(args: argparse.Namespace) -> int:
     image = IMAGES.get(args.image)
-    if not image or not image.sealed_from or not image.sealed_target:
+    if not image or not image.requires_keys:
         die("choose a sealed image; run ./build.py images")
 
     manager = require_container_mgr(args.container_mgr)
@@ -473,9 +464,7 @@ def cmd_seal(args: argparse.Namespace) -> int:
         "-f",
         str(ROOT / image.containerfile),
         "--target",
-        image.sealed_target,
-        "--build-arg",
-        f"SEALED_FROM={image.sealed_from}",
+        image.target,
         "--secret",
         f"id=secureboot_key,src={directory / 'db.key'}",
         "--secret",

@@ -1,8 +1,3 @@
-# Sealed target: choose the content stage with SEALED_FROM.
-#   observability:sealed  ->  --target sealed (SEALED_FROM=observability, default)
-#   nginx:sealed          ->  --target sealed --build-arg SEALED_FROM=nginx
-ARG SEALED_FROM=observability
-
 FROM quay.io/fedora/fedora-bootc:44 AS base
 
 # Copy any the creds needed for registry auth
@@ -13,10 +8,10 @@ RUN systemctl enable podman-auto-update.timer
 RUN systemctl enable bootc-fetch-apply-updates.timer
 
 # Install base packages
-RUN dnf install curl git cloud-init distrobox qemu-guest-agent \ 
+RUN dnf install curl git cloud-init distrobox qemu-guest-agent \
 cockpit-system cockpit-ws cockpit-files cockpit-networkmanager cockpit-ostree cockpit-selinux cockpit-storaged cockpit-podman \
 nfs-utils libnfsidmap sssd-nfs-idmap \
-zsh \ 
+zsh \
 -y
 RUN dnf clean all
 
@@ -72,15 +67,13 @@ COPY pihole/* /etc/containers/systemd
 RUN systemctl disable systemd-resolved.service
 RUN bootc container lint
 # ---------------------------------------------------------------------------
-# Sealed variants: UKI + composefs + fs-verity + Secure Boot (docs/sealed.md)
+# Sealed variant: UKI + composefs + fs-verity + Secure Boot (docs/sealed.md)
 #
-#   observability:sealed  ->  --target sealed  (SEALED_FROM=observability, default)
-#   nginx:sealed          ->  --target sealed --build-arg SEALED_FROM=nginx
-#
+# Built from the nginx content stage in the same Containerfile invocation.
 # Requires build secrets: secureboot_key (db.key), secureboot_cert (db.crt).
 # `./build.py seal --image nginx-sealed` supplies them from target/keys.
 # ---------------------------------------------------------------------------
-FROM ${SEALED_FROM} AS seal-prep
+FROM nginx AS seal-prep
 # Newest bootc + UKI toolchain; systemd-boot replaces bootupd/GRUB.
 # If (and only if) bootc actually changed, the initramfs MUST be regenerated
 # with the new bootc dracut modules before the UKI is built from it (bootc

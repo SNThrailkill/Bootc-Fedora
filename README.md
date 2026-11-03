@@ -29,9 +29,9 @@ and CI. `just` recipes are a convenience wrapper.
 
 `./build.py matrix` prints the image matrix as JSON. The GitHub Actions
 workflow runs it with `--compact` and passes each entry to the reusable build
-workflow, including the sealed entry (`nginx` target `sealed`, `SEALED_FROM=nginx`,
-tag `sealed`). Add a new image to `IMAGES` in `build.py` and it joins the
-matrix; no workflow edit is required.
+workflow, including the sealed entry (`nginx` target `sealed`, tag `sealed`).
+Add a new image to `IMAGES` in `build.py` and it joins the matrix; no workflow
+edit is required.
 
 ### Sealed images (demo)
 
@@ -56,14 +56,15 @@ material stays consistent.
   the `ALLOW_EPHEMERAL_SEAL_KEY` repository variable is set to `true`.
 - The public certificates (`keys/PK.crt`, `keys/KEK.crt`, `keys/db.crt`) and
   the `.auth` enrollment blobs are safe to commit; private keys are not.
-- The `sealed` target defaults to `SEALED_FROM=observability`; the
-  `nginx-sealed` entry in `build.py` (and CI) sets `SEALED_FROM=nginx`.
+- The sealed target builds from the `nginx` content stage and publishes as
+  `nginx:sealed`.
 
 See [docs/sealed.md](docs/sealed.md) for the chain and the demo runbook.
 
-CI builds the sealed variant directly with `SEALED_FROM=nginx` — one build
-from the content stage, not a base image followed by a separate seal stage.
-On `main` it stages the image under a candidate tag, pulls that exact registry
+CI builds the sealed variant from the `nginx` stage in one invocation — the
+content stage and the seal chain are part of the same Containerfile build,
+with no dependency on the unsealed `nginx` job or a published base image. On
+`main` it stages the image under a candidate tag, pulls that exact registry
 digest, installs it, and (when a previous `:sealed` image exists) applies the
 new image over the old installation with `bootc install to-existing-root`.
 Only after those checks pass is `:sealed` updated. The checks assert the UKI

@@ -47,6 +47,5 @@ jobs:
       containerfile: ${{ matrix.containerfile }}
       image_name: ${{ matrix.image_name }}
       tag_override: ${{ matrix.tag_override }}
-      build_args: ${{ matrix.build_args }}
       sealed: ${{ matrix.sealed }}
       oci: ${{ matrix.oci }}

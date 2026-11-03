@@ -21,10 +21,6 @@ on:
         description: "Publish only this tag instead of the latest/date tag set (e.g. sealed)"
         type: string
         default: ""
-      build_args:
-        description: "Newline-separated KEY=VALUE build args"
-        type: string
-        default: ""
       oci:
         description: "Use the OCI image format (required for sealed images)"
         type: boolean
@@ -208,9 +204,6 @@ jobs:
           if [ "${{ inputs.sealed }}" = "true" ]; then
             ARGS="$ARGS --secret id=secureboot_key,src=$RUNNER_TEMP/sealed-keys/db.key --secret id=secureboot_cert,src=$RUNNER_TEMP/sealed-keys/db.crt --device /dev/fuse --cap-add=all"
           fi
-          while IFS= read -r line; do
-            [ -n "$line" ] && ARGS="$ARGS --build-arg $line"
-          done <<< "${{ inputs.build_args }}"
           echo "args=$ARGS" >> "$GITHUB_OUTPUT"
 
       - name: Build Image

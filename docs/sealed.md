@@ -58,9 +58,9 @@ keys and `GUID.txt` offline, and rotate before the certificates expire.
 ./build.py verify --image nginx-sealed --tag demo
 ```
 
-`seal` calls the `sealed` target with:
+`seal` calls the `sealed` target, which builds from the `nginx` content stage,
+with:
 
-- `--build-arg SEALED_FROM=nginx` (the content stage from `build.py`)
 - `--secret id=secureboot_key,src=target/keys/db.key`
 - `--secret id=secureboot_cert,src=target/keys/db.crt`
 - `--device /dev/fuse --cap-add=all` and an SELinux label
@@ -78,8 +78,8 @@ and `/dev/fuse` before the workshop.
 ## CI
 
 `build-images.yml` runs `./build.py matrix` and passes each entry to the
-reusable workflow. The sealed entry builds the `sealed` target directly:
-`SEALED_FROM=nginx` makes the content stage and the seal chain part of one
+reusable workflow. The sealed entry builds the `sealed` target directly from
+the `nginx` stage, so the content stage and the seal chain are part of one
 Containerfile invocation, with no dependency on the unsealed `nginx` job or a
 published base image.
 

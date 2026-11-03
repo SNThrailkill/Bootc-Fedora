@@ -57,7 +57,6 @@ class ImageTableTests(unittest.TestCase):
                     "tag_override",
                     "sealed",
                     "oci",
-                    "build_args",
                 },
             )
 
@@ -71,7 +70,6 @@ class ImageTableTests(unittest.TestCase):
         self.assertEqual(sealed["image_name"], "nginx")
         self.assertEqual(sealed["tag_override"], "sealed")
         self.assertEqual(sealed["build_target"], "sealed")
-        self.assertEqual(sealed["build_args"], "SEALED_FROM=nginx")
 
     def test_sealed_images_are_complete(self):
         sealed = [i for i in build.IMAGES.values() if i.requires_keys]
@@ -79,8 +77,6 @@ class ImageTableTests(unittest.TestCase):
         for image in sealed:
             with self.subTest(image=image.name):
                 self.assertEqual(image.target, "sealed")
-                self.assertTrue(image.sealed_from)
-                self.assertEqual(image.sealed_target, "sealed")
 
     def test_sealed_key_scripts_exist(self):
         self.assertTrue((ROOT / "keys" / "util" / "keygen.sh").is_file())
