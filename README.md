@@ -11,6 +11,8 @@ The GitHub Actions and Containerfile has support for private registry/repository
 
 The GitHub Actions also will create a [SBOM](https://anchore.com/sbom/what-is-an-sbom/) of your image using [Syft](https://github.com/anchore/syft/), run a vulnerbility scan using [Grype](https://github.com/anchore/grype/), and upload the report to your Code Scanning page in the Security center of your repository. This will only work if your repo has Code Scanning enabled for your repository. [See the GitHub docs](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) for which repos can enable this.
 
+Published images are rechunked with [chunkah](https://github.com/coreos/chunkah) before they are pushed. Instead of keeping the Dockerfile layer boundaries, the image is split into content-based layers, so a bootc host only pulls the layers that actually changed between updates. The splitter prunes the OSTree `/sysroot` data and keeps the `containers.bootc=1` label.
+
 ## Build locally
 
 The examples build with podman (or docker) and Python 3.9+. `build.py` is the

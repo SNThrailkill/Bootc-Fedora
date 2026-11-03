@@ -1,0 +1,16 @@
+# Vendored from https://github.com/coreos/chunkah/blob/v0.7.1/Containerfile.splitter
+# Used by .github/workflows/reusable-build-image.yml to rechunk images before
+# they are scanned, signed and pushed. Buildah only (the FROM oci: trick).
+ARG CHUNKAH=quay.io/coreos/chunkah:latest
+ARG CHUNKAH_ARGS=""
+ARG CHUNKAH_CONFIG_STR
+
+FROM overridden AS target
+FROM ${CHUNKAH} AS chunkah
+ARG CHUNKAH_CONFIG_STR
+ARG CHUNKAH_ARGS
+RUN --mount=type=bind,target=/run/src,rw \
+    --mount=from=target,target=/chunkah,ro \
+      chunkah build ${CHUNKAH_ARGS} --output oci:/run/src/out
+
+FROM oci:out
