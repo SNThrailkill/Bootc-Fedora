@@ -122,6 +122,39 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           oci: false
 
+      # Split the Dockerfile layers into content-based layers so bootc hosts
+      # only pull the layers that changed. The splitter prunes the OSTree
+      # /sysroot data and drops the OSTree labels, leaving a plain bootc image
+      # with containers.bootc=1 intact.
+      - name: Rechunk image with chunkah
+        id: chunkah
+        env:
+          TAGS: ${{ steps.metadata.outputs.tags }}
+        run: |
+          set -euo pipefail
+          read -r -a tags <<< "${TAGS}"
+          src="${IMAGE_NAME}:${tags[0]}"
+          tmp="${IMAGE_NAME}:chunkah-tmp"
+          config="$(python3 .github/chunkah/config-from-buildah.py "${src}")"
+
+          echo "Rechunking ${src} with chunkah"
+          buildah build \
+            --skip-unused-stages=false \
+            --from "${src}" \
+            --build-arg CHUNKAH=quay.io/coreos/chunkah:v0.7.1 \
+            --build-arg CHUNKAH_CONFIG_STR="${config}" \
+            --build-arg CHUNKAH_ARGS="--prune /sysroot/ --max-layers 128 --label ostree.commit- --label ostree.final-diffid-" \
+            -t "${tmp}" \
+            -v "${PWD}:/run/src" \
+            --security-opt=label=disable \
+            -f .github/chunkah/Containerfile.splitter .
+
+          for tag in "${tags[@]}"; do
+            buildah tag "${tmp}" "${IMAGE_NAME}:${tag}"
+          done
+          rm -rf out
+          echo "Chunked image layers: $(buildah inspect --format '{{len .OCIv1.RootFS.DiffIDs}}' "${IMAGE_NAME}:${tags[0]}")"
+
       - name: Setup Syft
         id: setup-syft
         if: false
