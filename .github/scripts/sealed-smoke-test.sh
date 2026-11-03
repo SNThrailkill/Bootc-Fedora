@@ -17,6 +17,7 @@
 # it preserves the existing root and adds a new deployment. The test then
 # verifies the new UKI and the copied Secure Boot enrollment blobs on the ESP.
 set -euo pipefail
+trap 'echo "::error::sealed smoke test failed at line $LINENO: $BASH_COMMAND"' ERR
 
 : "${CURRENT_REF:?CURRENT_REF is required}"
 : "${IMAGE:?IMAGE is required}"
@@ -51,8 +52,16 @@ podman_run() {
 }
 
 count_deployments() {
-    sudo find "${MNT}/ostree/deploy" -maxdepth 3 -type d -name '*.0' \
-        2>/dev/null | wc -l
+    local path count
+    for path in "${MNT}/ostree/deploy" "${MNT}/sysroot/ostree/deploy"; do
+        if [ -d "${path}" ]; then
+            count="$(sudo find "${path}" -maxdepth 3 -type d -name '*.0' \
+                2>/dev/null | wc -l)" || count=0
+            echo "${count}"
+            return 0
+        fi
+    done
+    echo 0
 }
 
 mkdir -p "${WORK_DIR}"
@@ -126,6 +135,13 @@ fi
 echo "::notice::Mounted ${ROOT_PART} at ${MNT} and ${ESP_PART} at ${MNT}/boot"
 
 BEFORE="$(count_deployments)"
+echo "::notice::Deployments on the installed disk before upgrade: ${BEFORE}"
+if [ "${BEFORE}" -eq 0 ]; then
+    echo "::error::installed root has no ostree deployments under ${MNT}"
+    sudo ls -la "${MNT}" || true
+    sudo find "${MNT}" -maxdepth 3 -type d -name deploy -print 2>/dev/null || true
+    exit 1
+fi
 
 if [ -n "${PREVIOUS_REF}" ]; then
     # Phase 2: apply the tested image over the existing installation. This is
@@ -140,6 +156,7 @@ if [ -n "${PREVIOUS_REF}" ]; then
         exit 1
     fi
     AFTER="$(count_deployments)"
+    echo "::notice::Deployments on the installed disk after upgrade: ${AFTER}"
     if [ "${AFTER}" -le "${BEFORE}" ]; then
         echo "::error::upgrade did not add a deployment (${BEFORE} -> ${AFTER})"
         exit 1
