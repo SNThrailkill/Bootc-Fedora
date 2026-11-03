@@ -53,6 +53,14 @@ podman_run() {
 
 count_deployments() {
     local path count
+    # Composefs-native installs keep deployments under state/deploy; ostree
+    # installs keep them under ostree/deploy/<stateroot>/deploy/<commit>.0.
+    if [ -d "${MNT}/state/deploy" ]; then
+        count="$(sudo find "${MNT}/state/deploy" -mindepth 1 -maxdepth 1 \
+            -type d 2>/dev/null | wc -l)" || count=0
+        echo "${count}"
+        return 0
+    fi
     for path in "${MNT}/ostree/deploy" "${MNT}/sysroot/ostree/deploy"; do
         if [ -d "${path}" ]; then
             count="$(sudo find "${path}" -maxdepth 3 -type d -name '*.0' \
