@@ -270,34 +270,6 @@ jobs:
           buildah push "${IMAGE_NAME}:${{ steps.imagetags.outputs.primary }}" \
             "oci-archive:${RUNNER_TEMP}/image.tar"
 
-      # Enforced expected-key check on the local build. The install/upgrade
-      # smoke test below repeats this against the image that is actually
-      # published (or the PR archive).
-      - name: Verify sealed UKI signatures
-        if: inputs.sealed
-        env:
-          RUN_REF: localhost/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}
-          KEY_DIR: ${{ runner.temp }}/sealed-keys
-        run: |
-          set -euo pipefail
-          sudo podman run --rm --entrypoint /bin/bash \
-            -v "$KEY_DIR:/keys:ro" \
-            "$RUN_REF" -c '
-            set -eux
-            kver=$(ls /usr/lib/modules)
-            # --list is diagnostic; --cert is the enforced expected-key check.
-            sbverify --list "/boot/EFI/Linux/${kver}.efi"
-            sbverify --cert /keys/db.crt "/boot/EFI/Linux/${kver}.efi"
-            sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
-            sbverify --cert /keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
-            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
-            strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
-            for f in PK KEK db; do
-              test -s "/usr/lib/bootc/install/secureboot-keys/auto/${f}.auth"
-            done
-          '
-          echo "::notice::Sealed UKI and systemd-boot signatures verified against the expected db certificate"
-
       - name: Setup Syft
         id: setup-syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -466,6 +438,31 @@ jobs:
           sudo podman image inspect "$current_ref" >/dev/null
           echo "ref=$current_ref" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/image.tar"
+
+      - name: Verify sealed UKI signatures
+        if: inputs.sealed
+        env:
+          RUN_REF: ${{ steps.smoke-image.outputs.ref }}
+          KEY_DIR: ${{ runner.temp }}/sealed-keys
+        run: |
+          set -euo pipefail
+          sudo podman run --rm --entrypoint /bin/bash \
+            -v "$KEY_DIR:/keys:ro" \
+            "$RUN_REF" -c '
+            set -eux
+            kver=$(ls /usr/lib/modules)
+            # --list is diagnostic; --cert is the enforced expected-key check.
+            sbverify --list "/boot/EFI/Linux/${kver}.efi"
+            sbverify --cert /keys/db.crt "/boot/EFI/Linux/${kver}.efi"
+            sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+            sbverify --cert /keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
+            strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
+            for f in PK KEK db; do
+              test -s "/usr/lib/bootc/install/secureboot-keys/auto/${f}.auth"
+            done
+          '
+          echo "::notice::Sealed UKI and systemd-boot signatures verified against the expected db certificate"
 
       # On main, install and upgrade the exact registry digest staged above;
       # on PRs, use the local OCI archive because nothing is published. The
