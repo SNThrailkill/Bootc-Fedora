@@ -2,11 +2,11 @@
 
 ## CI/CD overview
 - Three GitHub Actions workflows in `.github/workflows/`:
-  - `build-images.yml` — top-level; triggers on PR/push/schedule (Sun 10:05 UTC) and fans out to per-image reusable workflow jobs: base, nginx, k3s, prometheus, nas.
-  - `reusable-build-image.yml` — the actual build/push/sign/attest logic. Buildah builds each target from `Containerfile`, pushes to GHCR (`ghcr.io/<owner>/<repo>/<image>`), generates an SBOM (anchore), scans it (anchore scan-action), uploads SARIF, signs with cosign (key-based, `SIGNING_SECRET`), then attaches an SBOM attestation with cosign. After the build it rechunks the image with chunkah (`.github/chunkah/`) into content-based layers before SBOM/push/sign.
-  - `build-artifact.yml` — manual/PR-triggered; turns a built bootc image into a disk artifact (ami/qcow2/vmdk/...) via bootc-image-builder.
+  - `build-images.yml` — top-level; triggers on PR/push/schedule (Sun 10:05 UTC) and fans out to per-image reusable workflow jobs: base, nginx, nginx-sealed, k3s, prometheus, nas. The sealed job builds `SEALED_FROM=nginx` directly in one invocation (no base-image-then-seal stage) and runs the loopback install smoke test.
+  - `reusable-build-image.yml` — the actual build/push/sign/attest logic. Buildah builds each target from `Containerfile`, pushes to GHCR (`ghcr.io/<owner>/<repo>/<image>`), generates an SBOM (anchore), scans it (anchore scan-action), uploads SARIF, signs with cosign (key-based, `SIGNING_SECRET`), then attaches an SBOM attestation with cosign. After the build it rechunks unsealed images with chunkah (`.github/chunkah/`) into content-based layers before SBOM/push/sign. Sealed builds use the ephemeral demo key, stay flat (chunkah's re-layering breaks the composefs digest), verify the seal with a loopback `bootc install`, and sign with Rekor (falling back to no-Rekor if the log is unavailable).
+  - `build-artifact.yml` — manual; turns a built bootc image into a disk artifact (ami/qcow2/vmdk/...) with `osbuild/image-builder-action`.
 - There is also a `.gitlab-ci.yml`, but the active pipelines are GitHub Actions.
-- Containerfile build targets: `base`, `observability`, `prometheus`, `loki`, `nginx`, `k3s`, `nas`, plus the `sealed` target (UKI + composefs + fs-verity). See `Containerfile` for the stage graph.
+- Containerfile build targets: `base`, `observability`, `prometheus`, `nginx`, `k3s`, `nas`, plus the `sealed` target (UKI + composefs + fs-verity). See `Containerfile` for the stage graph.
 
 ## NAS image
 - `nas/Containerfile` is a three-stage build: `kernel-target` resolves the latest matching `kernel-devel`, `zfs-builder` compiles OpenZFS with DKMS against that exact kernel, and `nas` copies only the modules plus the userspace manifest.
@@ -24,13 +24,13 @@
 - Custom regex managers track the chunkah image in `reusable-build-image.yml`, the k3s/OpenZFS/Cockpit ZFS pins in the Containerfiles, the Syft download, and the Prometheus release ARG.
 - Dependabot was removed (its config had an empty `package-ecosystem` and would have conflicted with Renovate).
 - GitHub Actions are pinned by digest; Renovate keeps both digest and version tag up to date. Routine action updates are grouped and automerged after CI; majors are manual.
-- `osbuild/bootc-image-builder-action` is archived upstream and has no Node 24 release; it is pinned to its final `main` commit. Migrate `build-artifact.yml` to `osbuild/image-builder-action` separately (different inputs).
+- `build-artifact.yml` uses `osbuild/image-builder-action`, pinned to a `main` commit because upstream has no tagged releases yet. Unlike the archived bootc-image-builder action, it has no config-file/additional-args inputs, so the old root-size customization and `--use-librepo` are not carried over.
 
-## Known issue: Rekor (sigstore transparency log) flakiness
-- The public Rekor instance (`rekor.sigstore.dev`) is a shared service with a 99.5% SLO and is intermittently unavailable. cosign uploads to it by default even for key-based signing, so a Rekor outage fails the pipeline.
-- cosign v3 (installed by `cosign-installer` v4) rejects `--tlog-upload=false` while the default signing config is active.
-- Fix applied in `reusable-build-image.yml`: `.github/cosign/signing-config.json` is the sigstore root-signing config with the Rekor entries removed, passed via `--signing-config` to both `cosign sign` and `cosign attest`. The signature/attestation is stored in the OCI registry alongside the image; there is no public transparency-log entry.
-- Verify images signed this way with `cosign verify --key cosign.pub --insecure-ignore-tlog=true ...` (and `cosign verify-attestation --insecure-ignore-tlog=true ...` for attestations).
+## Rekor (sigstore transparency log)
+- Public images are signed and attested with the public Rekor log enabled, so anyone can verify the signature/attestation and its transparency-log entry. The primary steps use `.github/cosign/signing-config-rekor.json`.
+- Rekor is a shared service and can be unavailable. The primary signing/attestation steps are `continue-on-error`; on failure, fallback steps use `.github/cosign/signing-config-no-rekor.json` and sign anyway, with a warning that no transparency-log entry exists. A Rekor outage therefore cannot block CD.
+- Offline signature and attestation verification are enforced against the committed `cosign.pub`. A separate optional Rekor verification runs when the primary Rekor path succeeded and is non-blocking.
+- Verify images with `cosign verify --key cosign.pub <image>`; if signed via the fallback, use `--insecure-ignore-tlog=true`. Attestations: `cosign verify-attestation --key cosign.pub --type spdxjson <image>`.
 
 ## Known issue: prometheus build target fails dnf install of loki/grafana
 - The `prometheus` Containerfile stage pulls the grafana yum repo and runs `dnf install loki grafana -y`, which failed with a Curl SSL CA cert error reaching `https://rpm.grafana.com/repodata/repomd.xml`. The grafana repo config points `sslcacert` at `/etc/pki/tls/certs/ca-bundle.crt`, which must exist/populated before dnf runs.

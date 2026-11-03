@@ -190,9 +190,9 @@
       "enabled": false
     },
     {
-      "description": "Archived upstream and pinned to its final main commit; migrate to osbuild/image-builder-action separately",
+      "description": "osbuild/image-builder-action has no tagged releases yet; pinned to a main commit manually",
       "matchPackageNames": [
-        "osbuild/bootc-image-builder-action"
+        "osbuild/image-builder-action"
       ],
       "enabled": false
     }

@@ -71,24 +71,40 @@ version, and the sealed install config files.
 Sealed builds currently require podman. `./build.py doctor` checks for podman
 and `/dev/fuse` before the workshop.
 
+## CI
+
+`build-images.yml` has a `build-nginx-sealed` job that builds the `sealed`
+target directly: `SEALED_FROM=nginx` makes the content stage and the seal
+chain part of one Containerfile invocation, with no dependency on the
+unsealed `build-nginx` job or a published base image.
+
+CI generates an ephemeral demo key, builds `nginx:sealed`, and runs a
+loopback `bootc install` smoke test on the flat sealed image. That test fails
+unless every digest embedded in the signed UKI matches the EROFS image bootc
+generates from the pulled layers, so it proves the seal end to end. Sealed
+images are deliberately not chunked: chunkah's re-layering does not preserve
+the xattrs/EROFS metadata covered by the composefs digest, and the loopback
+test fails with a digest mismatch when it is applied. Unsealed images are
+chunked. The SBOM is generated from the sealed OCI archive. Signing and SBOM
+attestations go to the public Rekor log by default; if Rekor is unavailable
+they fall back to no-Rekor signing with a warning (non-blocking). Offline
+signature/attestation verification is enforced, the optional Rekor-entry
+check is non-blocking, and the seal smoke test is enforced.
+
 ## CI secrets
 
-Add the db private key as `SECUREBOOT_DB_KEY`:
-
-- GitHub Actions: repository secret.
-- GitLab CI: masked and protected CI/CD variable.
-
-The public certificate and enrollment blobs can live in the repository. PR
-builds should use an ephemeral key (the `keys/util/keygen.sh` output) so forks
-never need the real key; only the protected default branch should use the
-repository secret.
+The CI job currently uses an ephemeral demo key for every sealed build, so
+forks and PRs can exercise the seal without secrets. For stable published
+signatures, add the db private key as `SECUREBOOT_DB_KEY` and commit the
+matching `keys/db.crt`, then update the key-preparation step to use them.
+The public certificate and enrollment blobs are safe to commit; the private
+key is not.
 
 ## Full boot (next)
 
-`install`/`vm` commands will install the sealed image to a disk image and boot
-it under OVMF with the demo keys enrolled. Until then, `verify` is the
-deterministic, fast check for the workshop; the full Secure Boot boot is the
-optional finale.
+The CI smoke test proves the install-time seal without KVM. The remaining
+optional finale is booting the sealed disk under OVMF with the demo keys
+enrolled and checking Secure Boot end to end.
 
 ## Troubleshooting
 

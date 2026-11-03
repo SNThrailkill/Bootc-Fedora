@@ -55,6 +55,29 @@ as well.
 
 See [docs/sealed.md](docs/sealed.md) for the chain and the demo runbook.
 
+CI builds the sealed variant directly with `SEALED_FROM=nginx` — one build
+from the content stage, not a base image followed by a separate seal stage —
+and runs a loopback `bootc install` smoke test that fails if the seal does not
+verify. The artifact workflow uses `osbuild/image-builder-action` for disk
+images and ISOs.
+
+### Verify published images
+
+Signatures and SBOM attestations are recorded in the public Rekor log by
+default, so they can be verified without trusting the workflow run:
+
+```bash
+cosign verify --key cosign.pub ghcr.io/snthrailkill/bootc-fedora/nginx:latest
+cosign verify-attestation --key cosign.pub --type spdxjson \
+  ghcr.io/snthrailkill/bootc-fedora/nginx:latest
+```
+
+If Rekor was unavailable during a build, the workflow signs with a no-Rekor
+fallback and logs a warning; verify those images with
+`--insecure-ignore-tlog=true`. Sealed images additionally carry a signed UKI
+and a composefs digest covered by fs-verity; [docs/sealed.md](docs/sealed.md)
+describes the full verification chain.
+
 ## K3S
 This image simply installs k3s on our base image. Meant to be used as either server or agent.
 

@@ -12,10 +12,15 @@ on:
           - "ami"
           - "qcow2"
           - "vmdk"
-          - "anaconda-iso"
           - "raw"
           - "vhd"
           - "gce"
+          - "bootc-generic-iso"
+      installer_ref:
+        description: 'Installer container for bootc-generic-iso (required for that type)'
+        type: string
+        required: false
+        default: ''
       flavor:
         description: 'The image to create the artifact for'
         type: choice
@@ -67,27 +72,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # This action is archived upstream and has no release with the Node 24
-      # runtime; pin its final main commit, which only adds the deprecation
-      # notice and switches runs.using from node20 to node24. The maintained
-      # replacement (osbuild/image-builder-action) has a different input model
-      # and needs a separate migration.
-      - name: Build bootable image using bootc-image-builder
+      - name: Validate installer reference
+        if: inputs.build_type == 'bootc-generic-iso' && inputs.installer_ref == ''
+        run: |
+          echo "::error::bootc-generic-iso requires installer_ref"
+          exit 1
+
+      # The archive is generated with the maintained image-builder action.
+      # There are no tagged releases yet, so pin the current main commit.
+      # image-builder has no config-file/additional-args inputs, so the old
+      # config.toml root-size customization and --use-librepo are not carried
+      # over; bootc_default_fs=btrfs matches the previous rootfs setting.
+      - name: Build bootable image using image-builder
         id: build
-        uses: osbuild/bootc-image-builder-action@028e4d28330efe546229eb9cb52aee78174d2347 # main (node24; archived)
+        uses: osbuild/image-builder-action@a56f95dd77327e604a4f4d9fc06a9641313fda36 # main (no tagged releases yet)
         with:
-          image: ${{ steps.registry_case.outputs.lowercase }}:${{ env.DEFAULT_TAG }}
-          types: ${{ github.event.inputs.build_type }}
-          config-file: ./config.toml
-          rootfs: btrfs
-          additional-args: --use-librepo=True
+          # Disk images install this bootc image. The ISO type uses
+          # installer_ref as the Anaconda environment and the bootc image as
+          # the payload.
+          bootc_ref: ${{ inputs.build_type == 'bootc-generic-iso' && inputs.installer_ref || format('{0}:{1}', steps.registry_case.outputs.lowercase, env.DEFAULT_TAG) }}
+          bootc_installer_payload_ref: ${{ inputs.build_type == 'bootc-generic-iso' && format('{0}:{1}', steps.registry_case.outputs.lowercase, env.DEFAULT_TAG) || '' }}
+          bootc_default_fs: btrfs
+          image_type: ${{ inputs.build_type }}
 
       - name: Upload Bootable Image Artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: bootc-image-${{ github.event.inputs.build_type }}
-          path: ${{ github.workspace }}/output/*
+          name: bootc-image-${{ inputs.build_type }}
+          path: ${{ github.workspace }}/output/**
           if-no-files-found: error
           retention-days: 0
           compression-level: 0
-          overwrite: true         
+          overwrite: true
