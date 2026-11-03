@@ -128,8 +128,11 @@ keys are not.
 
 ## Full boot (next)
 
-The CI smoke test proves install and the in-place upgrade path without KVM. The
-remaining optional finale is booting the sealed disk under OVMF with the
+The CI smoke test proves a fresh install and the in-place upgrade path
+(`bootc install to-existing-root --replace alongside`) without KVM. It does
+not cover a real `bootc upgrade` / `bootc switch` on a booted host, which is
+the path that resolves and stages the tracked registry reference at runtime.
+The remaining optional finale is booting the sealed disk under OVMF with the
 committed keys enrolled and checking Secure Boot end to end, including
 auto-enrollment from the `keys/auth/auto/*.auth` blobs.
 

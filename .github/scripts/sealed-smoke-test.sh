@@ -194,7 +194,12 @@ kver=$(ls /usr/lib/modules | head -1)
 test -n "$kver"
 test -s "/target/boot/EFI/Linux/${kver}.efi"
 sbverify --cert /keys/db.crt "/target/boot/EFI/Linux/${kver}.efi"
-strings -a "/target/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
+objcopy -O binary --only-section=.cmdline "/target/boot/EFI/Linux/${kver}.efi" /tmp/uki-cmdline
+grep -aq "composefs.digest" /tmp/uki-cmdline
+if grep -aq "root=" /tmp/uki-cmdline; then
+    echo "unexpected root= in UKI cmdline" >&2
+    exit 1
+fi
 
 for f in PK KEK db; do
     test -s "/target/boot/loader/keys/auto/${f}.auth"

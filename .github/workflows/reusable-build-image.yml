@@ -126,6 +126,28 @@ jobs:
               exit 1
             }
           done
+          # Enforce that the committed enrollment blobs enroll the committed
+          # certificates: a key regen that updates the certs but not the .auth
+          # blobs would publish a sealed image whose auto-enroll installs the
+          # wrong db, so the signed UKI would not verify at boot.
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+
+          for name in ("PK", "KEK", "db"):
+              cert = pathlib.Path(f"keys/{name}.crt")
+              der = subprocess.run(
+                  ["openssl", "x509", "-in", str(cert), "-outform", "DER"],
+                  check=True,
+                  capture_output=True,
+              ).stdout
+              blob = pathlib.Path(f"keys/auth/auto/{name}.auth").read_bytes()
+              if der not in blob:
+                  raise SystemExit(
+                      f"keys/auth/auto/{name}.auth does not contain keys/{name}.crt"
+                  )
+          print("::notice::enrollment blobs match the committed certificates")
+          PY
 
       - name: Compute image tags
         id: imagetags
@@ -450,7 +472,12 @@ jobs:
             sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
             sbverify --cert /keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
             objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
-            strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
+            objcopy -O binary --only-section=.cmdline "/boot/EFI/Linux/${kver}.efi" /tmp/uki-cmdline
+            grep -aq "composefs.digest" /tmp/uki-cmdline
+            if grep -aq "root=" /tmp/uki-cmdline; then
+              echo "unexpected root= in UKI cmdline" >&2
+              exit 1
+            fi
             for f in PK KEK db; do
               test -s "/usr/lib/bootc/install/secureboot-keys/auto/${f}.auth"
             done

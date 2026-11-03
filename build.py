@@ -514,7 +514,15 @@ sbverify --cert /keys/db.crt "/boot/EFI/Linux/${kver}.efi"
 sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
 sbverify --cert /keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
 objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
-strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
+# Read the exact UKI cmdline (not the whole PE, which embeds the kernel and
+# initramfs) and assert the composefs digest is present while a traditional
+# root= is absent; a stray root= would override the composefs root detection.
+objcopy -O binary --only-section=.cmdline "/boot/EFI/Linux/${kver}.efi" /tmp/uki-cmdline
+grep -aq "composefs.digest" /tmp/uki-cmdline
+if grep -aq "root=" /tmp/uki-cmdline; then
+    echo "unexpected root= in UKI cmdline" >&2
+    exit 1
+fi
 for f in PK KEK db; do
     test -s "/usr/lib/bootc/install/secureboot-keys/auto/${f}.auth"
 done
