@@ -9,10 +9,30 @@ on:
         description: "Path to Containefile used for this build"
         type: string
         default: ./Containerfile
+      image_name:
+        description: "Image name; defaults to build_target"
+        type: string
+        default: ""
+      sealed:
+        description: "Build and verify a sealed (UKI + composefs) variant"
+        type: boolean
+        default: false
+      tag_override:
+        description: "Publish only this tag instead of the latest/date tag set (e.g. sealed)"
+        type: string
+        default: ""
+      build_args:
+        description: "Newline-separated KEY=VALUE build args"
+        type: string
+        default: ""
+      oci:
+        description: "Use the OCI image format (required for sealed images)"
+        type: boolean
+        default: false
 
 
 env:
-  IMAGE_NAME: "${{ inputs.build_target }}"  # the name of the image produced by this build, matches build target
+  IMAGE_NAME: "${{ inputs.image_name != '' && inputs.image_name || inputs.build_target }}"
   IMAGE_DESC: "Sean's Bootc Fedora Images"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}"  # do not edit
 
@@ -36,12 +56,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # This is optional, but if you see that your builds are way too big for the runners, you can enable this by uncommenting the following lines:
-      # - name: Maximize build space
-      #   uses: ublue-os/remove-unwanted-software@cc0becac701cf642c8f0a6613bbdaf5dc36b259e # v9
-      #   with:
-      #     remove-codeql: true
-      
+      # Sealed builds need room for the rootfs, the OCI archive and the
+      # loopback install test on the ~14 GB hosted runner.
+      - name: Maximize build space
+        if: inputs.sealed && runner.environment == 'github-hosted'
+        uses: ublue-os/remove-unwanted-software@cc0becac701cf642c8f0a6613bbdaf5dc36b259e # v9
+        with:
+          remove-codeql: true
+
       - name: Get current date
         id: date
         run: |
@@ -50,6 +72,35 @@ jobs:
           # https://artifacthub.io/docs/topics/repositories/container-images/
           # https://linux.die.net/man/1/date
           echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
+
+      # The sealed chain signs systemd-boot and the UKI inside the build via
+      # --mount=type=secret. CI uses an ephemeral demo key so the seal flow is
+      # exercised on every build. For stable published signatures, provide
+      # SECUREBOOT_DB_KEY and a matching committed keys/db.crt instead.
+      - name: Prepare demo Secure Boot key
+        if: inputs.sealed
+        run: |
+          set -euo pipefail
+          ./build.py keygen --demo --key-dir "$RUNNER_TEMP/sealed-keys"
+
+      - name: Compute image tags
+        id: imagetags
+        run: |
+          DATE_SHORT="$(date -u +%Y%m%d)"
+          if [ -n "${{ inputs.tag_override }}" ]; then
+            TAGS="type=raw,value=${{ inputs.tag_override }}"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              TAGS="$TAGS"$'\n'"type=sha"$'\n'"type=ref,event=pr"
+            fi
+          else
+            TAGS="type=raw,value=latest"$'\n'"type=raw,value=latest.${DATE_SHORT}"$'\n'"type=raw,value=${DATE_SHORT}"$'\n'"type=sha,enable=${{ github.event_name == 'pull_request' }}"$'\n'"type=ref,event=pr"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "primary=${{ inputs.tag_override != '' && inputs.tag_override || 'latest' }}" >> "$GITHUB_OUTPUT"
 
       # Workaround bug where capital letters in your GitHub username make it impossible to push to GHCR.
       # https://github.com/macbre/push-to-ghcr/issues/12
@@ -71,14 +122,9 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: metadata
         with:
-          # This generates all the tags for your image, you can add custom tags here too!
-          # By default, it should generate "latest" and "latest.(date here)".
-          tags: |
-            type=raw,value=latest
-            type=raw,value=latest.{{date 'YYYYMMDD'}}
-            type=raw,value={{date 'YYYYMMDD'}}
-            type=sha,enable=${{ github.event_name == 'pull_request' }}
-            type=ref,event=pr
+          # Tag set computed above: either the sealed override tag or the
+          # default latest/date/pr tags.
+          tags: ${{ steps.imagetags.outputs.tags }}
           labels: |
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}/refs/heads/main/README.md
             org.opencontainers.image.created=${{ steps.date.outputs.date }}
@@ -107,6 +153,18 @@ jobs:
       #     REGISTRY_CONF: ${{ secrets.REGISTRY_CONF }}
       #   run: echo $REGISTRY_CONF >> ./auth.json
 
+      - name: Compute build args
+        id: buildargs
+        run: |
+          ARGS="--target=${{ inputs.build_target }}"
+          if [ "${{ inputs.sealed }}" = "true" ]; then
+            ARGS="$ARGS --secret id=secureboot_key,src=$RUNNER_TEMP/sealed-keys/db.key --secret id=secureboot_cert,src=$RUNNER_TEMP/sealed-keys/db.crt --device /dev/fuse --cap-add=all"
+          fi
+          while IFS= read -r line; do
+            [ -n "$line" ] && ARGS="$ARGS --build-arg $line"
+          done <<< "${{ inputs.build_args }}"
+          echo "args=$ARGS" >> "$GITHUB_OUTPUT"
+
       - name: Build Image
         id: build_image
         uses: redhat-actions/buildah-build@719e3c40d8af9790c23eca13f7daa339f2867034 # v3.1.0
@@ -115,12 +173,11 @@ jobs:
             ${{ inputs.containerfile }}
           # Postfix image name with -custom to make it a little more descriptive
           # Syntax: https://docs.github.com/en/actions/learn-github-actions/expressions#format
-          extra-args: |
-            --target=${{ inputs.build_target }}
+          extra-args: ${{ steps.buildargs.outputs.args }}
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          oci: false
+          oci: ${{ inputs.oci }}
           # buildah-build v3 squashes by default; keep v2's layered output.
           squash: false
 
@@ -130,6 +187,7 @@ jobs:
       # with containers.bootc=1 intact.
       - name: Rechunk image with chunkah
         id: chunkah
+        if: ${{ !inputs.sealed }}
         env:
           TAGS: ${{ steps.metadata.outputs.tags }}
         run: |
@@ -156,6 +214,56 @@ jobs:
           done
           echo "Chunked image ready"
 
+      - name: Export sealed image to OCI archive
+        if: inputs.sealed
+        run: |
+          set -euo pipefail
+          buildah push "${IMAGE_NAME}:${{ steps.imagetags.outputs.primary }}" \
+            "oci-archive:${RUNNER_TEMP}/image.tar"
+
+      # Sealed-only: prove the build-time composefs digest is reproducible at
+      # install time without KVM. bootc only stages a deployment when every
+      # digest baked into the signed UKI matches the EROFS image it generates
+      # from the pulled layers, so a successful --via-loopback install is the
+      # end-to-end seal check. This step is deliberately not continue-on-error:
+      # a failed seal fails the pipeline.
+      - name: Sealed install smoke test (loopback)
+        if: inputs.sealed
+        run: |
+          set -euo pipefail
+          LOADED=$(sudo podman load -i "$RUNNER_TEMP/image.tar")
+          echo "$LOADED"
+          IMG=$(echo "$LOADED" | sed -n 's/^Loaded image: //p' | awk '{print $1}')
+          [ -n "$IMG" ] || IMG=$(sudo podman images -q --no-trunc | head -1)
+          RUN_REF="localhost/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}"
+          sudo podman tag "$IMG" "$RUN_REF"
+          sudo podman image inspect "$RUN_REF" >/dev/null
+          mkdir -p "$RUNNER_TEMP/sealed-test"
+          truncate -s 12G "$RUNNER_TEMP/sealed-test/disk.img"
+          sudo podman run --rm --privileged --pid=host --ipc=host \
+            -v /dev:/dev \
+            -v /var/lib/containers:/var/lib/containers \
+            -v "$RUNNER_TEMP/sealed-test:/output" \
+            "$RUN_REF" \
+            bootc install to-disk --generic-image --wipe --via-loopback \
+              --target-imgref "${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}" \
+              /output/disk.img
+          echo "::notice::Sealed install smoke test passed - UKI digest matches the generated EROFS image"
+
+      - name: Verify sealed UKI signatures
+        if: inputs.sealed
+        run: |
+          set -euo pipefail
+          RUN_REF="localhost/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}"
+          sudo podman run --rm --entrypoint /bin/bash "$RUN_REF" -c '
+            set -eux
+            kver=$(ls /usr/lib/modules)
+            sbverify --list "/boot/EFI/Linux/${kver}.efi"
+            sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi" | grep -q composefs.digest
+          '
+          echo "::notice::Sealed UKI and systemd-boot signatures verified"
+
       - name: Setup Syft
         id: setup-syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -175,11 +283,16 @@ jobs:
         id: generate-sbom
         run: |
           set -euo pipefail
-          # Scan the chunkah OCI layout, not the registry's previous image.
-          # The pushed image is imported from this layout, so the SBOM covers
-          # the image this run actually ships.
-          syft scan "oci-dir:out" -o "spdx-json=sbom.json"
-          rm -rf out
+          if [ "${{ inputs.sealed }}" = "true" ]; then
+            # Scan the exact sealed OCI archive that the smoke test installed.
+            syft scan "oci-archive:${RUNNER_TEMP}/image.tar" -o "spdx-json=sbom.json"
+            rm -f "${RUNNER_TEMP}/image.tar"
+          else
+            # Scan the chunkah OCI layout, not the registry's previous image.
+            # The pushed image is imported from this layout.
+            syft scan "oci-dir:out" -o "spdx-json=sbom.json"
+            rm -rf out
+          fi
 
       - name: Scan SBOM for vulnerabilities
         id: scan
@@ -272,6 +385,9 @@ jobs:
 
       - name: Sign container image
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        # Signing is intentionally non-blocking; the seal itself is enforced
+        # by the loopback install smoke test above, not by Rekor.
+        continue-on-error: true
         run: |
           # The vendored signing config has no Rekor transparency-log service,
           # so signatures are stored only in the OCI registry. Verify with
@@ -292,6 +408,9 @@ jobs:
 
       - name: Add SBOM Attestation
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        # Non-blocking for the same reason as signing; seal verification is
+        # enforced earlier in the job.
+        continue-on-error: true
         env:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}

@@ -55,6 +55,12 @@ as well.
 
 See [docs/sealed.md](docs/sealed.md) for the chain and the demo runbook.
 
+CI builds the sealed variant directly with `SEALED_FROM=nginx` — one build
+from the content stage, not a base image followed by a separate seal stage —
+and runs a loopback `bootc install` smoke test that fails if the seal does not
+verify. The artifact workflow uses `osbuild/image-builder-action` for disk
+images and ISOs.
+
 ## K3S
 This image simply installs k3s on our base image. Meant to be used as either server or agent.
 
