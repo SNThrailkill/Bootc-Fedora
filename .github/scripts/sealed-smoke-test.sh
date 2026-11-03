@@ -88,11 +88,23 @@ podman_run -v "${WORK_DIR}:/output" "${BASE_REF}" \
         /output/disk.img
 
 # Mount the installed physical root and ESP so phase 2 can target it and the
-# verification can inspect the final ESP.
-for loop in $(sudo losetup -j "${DISK}" | cut -d: -f1); do
-    sudo losetup -d "${loop}"
-done
-LOOP="$(sudo losetup -Pf --show "${DISK}")"
+# verification can inspect the final ESP. The installer may leave the loop
+# device attached; reuse it when present instead of racing another attach.
+EXISTING_LOOP="$(sudo losetup -j "${DISK}" | awk -F: 'NR==1 {print $1}')"
+if [ -n "${EXISTING_LOOP}" ]; then
+    LOOP="${EXISTING_LOOP}"
+    sudo partprobe "${LOOP}" 2>/dev/null || true
+else
+    if ! ATTACHED="$(sudo losetup -Pf --show "${DISK}" 2>&1)"; then
+        echo "::error::could not attach ${DISK} to a loop device: ${ATTACHED}"
+        exit 1
+    fi
+    LOOP="${ATTACHED}"
+fi
+if [ -z "${LOOP}" ]; then
+    echo "::error::could not attach ${DISK} to a loop device"
+    exit 1
+fi
 sudo udevadm settle 2>/dev/null || true
 ROOT_PART="$(sudo lsblk -flnpo NAME,FSTYPE "${LOOP}" | awk '$2 ~ /^(ext4|xfs|btrfs)$/ && !found {print $1; found=1}')"
 ESP_PART="$(sudo lsblk -flnpo NAME,FSTYPE "${LOOP}" | awk '$2 == "vfat" && !found {print $1; found=1}')"
