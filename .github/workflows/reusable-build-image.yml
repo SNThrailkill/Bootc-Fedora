@@ -261,7 +261,8 @@ jobs:
             kver=$(ls /usr/lib/modules)
             sbverify --list "/boot/EFI/Linux/${kver}.efi"
             sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
-            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi" | grep -q composefs.digest
+            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
+            strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
           '
           echo "::notice::Sealed UKI and systemd-boot signatures verified"
 
