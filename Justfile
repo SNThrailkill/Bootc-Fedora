@@ -1,5 +1,5 @@
 # Local build helpers. The real logic lives in build.py so the same commands
-# run here, in GitHub Actions and in GitLab CI.
+# run here and in GitHub Actions.
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 default:
@@ -42,8 +42,8 @@ test:
     python3 -m unittest discover -s tests -v
 
 # Sealed images use a key hierarchy in target/keys/ (gitignored). Never commit
-# *.key. For a stable published key:
-#   GitHub Actions: SECUREBOOT_DB_KEY repository secret + committed keys/db.crt
-#   GitLab CI:      SECUREBOOT_DB_KEY masked + protected CI/CD variable
+# *.key. For a stable published key, add the db private key as the
+# SECUREBOOT_DB_KEY GitHub Actions repository secret and commit the matching
+# keys/db.crt.
 # `build.py keygen --demo --with-auth` refreshes the public keys/*.crt and
 # keys/auth/auto/*.auth blobs after generating a new hierarchy.

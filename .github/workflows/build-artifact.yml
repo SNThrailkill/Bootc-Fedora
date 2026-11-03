@@ -81,8 +81,8 @@ jobs:
       # The archive is generated with the maintained image-builder action.
       # There are no tagged releases yet, so pin the current main commit.
       # image-builder has no config-file/additional-args inputs, so the old
-      # config.toml root-size customization and --use-librepo are not carried
-      # over; bootc_default_fs=btrfs matches the previous rootfs setting.
+      # bootc-image-builder root-size customization and --use-librepo are not
+      # carried over; bootc_default_fs=btrfs matches the previous rootfs.
       - name: Build bootable image using image-builder
         id: build
         uses: osbuild/image-builder-action@a56f95dd77327e604a4f4d9fc06a9641313fda36 # main (no tagged releases yet)

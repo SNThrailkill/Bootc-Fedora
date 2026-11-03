@@ -5,7 +5,6 @@
   - `build-images.yml` — top-level; triggers on PR/push/schedule (Sun 10:05 UTC). It runs `./build.py matrix` and fans the resulting entries out to the reusable workflow, including base, nginx, nginx-sealed, k3s, prometheus and nas. The sealed entry builds `SEALED_FROM=nginx` directly in one invocation and runs the install/upgrade smoke test.
   - `reusable-build-image.yml` — the actual build/push/sign/attest logic. Buildah builds each target from `Containerfile`, pushes to GHCR (`ghcr.io/<owner>/<repo>/<image>`), generates an SBOM (anchore), scans it (anchore scan-action), uploads SARIF, signs with cosign (key-based, `SIGNING_SECRET`), then attaches an SBOM attestation with cosign. After the build it rechunks unsealed images with chunkah (`.github/chunkah/`) into content-based layers before SBOM/push/sign. Sealed builds stay flat (chunkah's re-layering breaks the composefs digest), use the repository Secure Boot key on `main` (falling back to an ephemeral key on PRs), stage a candidate digest, test the published bytes, and sign with Rekor (falling back to no-Rekor if the log is unavailable).
   - `build-artifact.yml` — manual; turns a built bootc image into a disk artifact (ami/qcow2/vmdk/...) with `osbuild/image-builder-action`.
-- There is also a `.gitlab-ci.yml`, but the active pipelines are GitHub Actions.
 - Containerfile build targets: `base`, `observability`, `prometheus`, `nginx`, `k3s`, `nas`, plus the `sealed` target (UKI + composefs + fs-verity). See `Containerfile` for the stage graph.
 
 ## NAS image
@@ -34,6 +33,3 @@
 - Rekor is a shared service and can be unavailable. The image signature step retries three times, then falls back to the no-Rekor config with a warning, so a Rekor outage cannot block CD.
 - Offline image-signature and attestation verification are enforced against the committed `cosign.pub`. A separate optional Rekor image-signature verification runs on `main` and is non-blocking.
 - Verify images with `cosign verify --key cosign.pub <image>`; if signed via the fallback, use `--insecure-ignore-tlog=true`. Attestations: `cosign verify-attestation --key cosign.pub --insecure-ignore-tlog=true --type spdxjson <image>`.
-
-## Known issue: prometheus build target fails dnf install of loki/grafana
-- The `prometheus` Containerfile stage pulls the grafana yum repo and runs `dnf install loki grafana -y`, which failed with a Curl SSL CA cert error reaching `https://rpm.grafana.com/repodata/repomd.xml`. The grafana repo config points `sslcacert` at `/etc/pki/tls/certs/ca-bundle.crt`, which must exist/populated before dnf runs.

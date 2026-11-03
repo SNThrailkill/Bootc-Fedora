@@ -1,15 +1,15 @@
 # Bootc Examples
 
-This repo contains some examples of how someone can use bootable containers to deploy a wide variety of applications. 
-The base images in this repo are based off the [Fedora bootc image](https://quay.io/repository/fedora/fedora-bootc?tab=tags). 
-All images come with `distrobox`, `cloud-init`, and `cockpit`. 
+This repo contains some examples of how someone can use bootable containers to deploy a wide variety of applications.
+The base images in this repo are based off the [Fedora bootc image](https://quay.io/repository/fedora/fedora-bootc?tab=tags).
+All images come with `distrobox`, `cloud-init`, and `cockpit`.
 These images assume you are using `cloud-init`, `kickstart`, or similar tool to provision your hosts with things like desired hostnames, IP addresses, etc during initial boot.
 
-The `Containerfile` contains multiple stages that can be used to get exactly the software you need. See [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/) documentation for more information on how this works. For this repo, the image tag is the same as the build target name.
+The `Containerfile` contains multiple stages that can be used to get exactly the software you need. See [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/) documentation for more information on how this works. Each image is published under its build target name; the `nginx-sealed` entry is the exception and publishes as `nginx:sealed`.
 
-The GitHub Actions and Containerfile has support for private registry/repository if you uncomment the applicable lines.
+The GitHub Actions workflow and Containerfile include commented-out hooks for a private registry/repository if you need them.
 
-The GitHub Actions also will create a [SBOM](https://anchore.com/sbom/what-is-an-sbom/) of your image using [Syft](https://github.com/anchore/syft/), run a vulnerbility scan using [Grype](https://github.com/anchore/grype/), and upload the report to your Code Scanning page in the Security center of your repository. This will only work if your repo has Code Scanning enabled for your repository. [See the GitHub docs](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) for which repos can enable this.
+The GitHub Actions also will create a [SBOM](https://anchore.com/sbom/what-is-an-sbom/) of your image using [Syft](https://github.com/anchore/syft/), run a vulnerability scan using [Grype](https://github.com/anchore/grype/), and upload the report to your Code Scanning page in the Security center of your repository. This will only work if your repo has Code Scanning enabled for your repository. [See the GitHub docs](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) for which repos can enable this.
 
 Published images are rechunked with [chunkah](https://github.com/coreos/chunkah) before they are pushed. Instead of keeping the Dockerfile layer boundaries, the image is split into content-based layers, so a bootc host only pulls the layers that actually changed between updates. The splitter prunes the OSTree `/sysroot` data and keeps the `containers.bootc=1` label.
 
@@ -50,15 +50,14 @@ a Secure Boot VM boot, add `--with-auth` to generate the UEFI enrollment blobs;
 that also refreshes the committed public `keys/{PK,KEK,db}.crt` so the key
 material stays consistent.
 
-- Published sealed images require the db private key as `SECUREBOOT_DB_KEY`
-  (GitHub Actions repository secret, or masked/protected GitLab CI/CD variable)
-  and the matching public `keys/db.crt`. CI refuses to publish on `main` with
-  an ephemeral key unless the `ALLOW_EPHEMERAL_SEAL_KEY` repository variable is
-  set to `true`.
+- Published sealed images require the db private key as the
+  `SECUREBOOT_DB_KEY` GitHub Actions repository secret and the matching public
+  `keys/db.crt`. CI refuses to publish on `main` with an ephemeral key unless
+  the `ALLOW_EPHEMERAL_SEAL_KEY` repository variable is set to `true`.
 - The public certificates (`keys/PK.crt`, `keys/KEK.crt`, `keys/db.crt`) and
   the `.auth` enrollment blobs are safe to commit; private keys are not.
-- The default sealed variant is `SEALED_FROM=observability`; the `nginx-sealed`
-  entry in `build.py` uses `SEALED_FROM=nginx`.
+- The `sealed` target defaults to `SEALED_FROM=observability`; the
+  `nginx-sealed` entry in `build.py` (and CI) sets `SEALED_FROM=nginx`.
 
 See [docs/sealed.md](docs/sealed.md) for the chain and the demo runbook.
 
@@ -133,4 +132,4 @@ This runs as a quadlet and is configured by the `nginx.conf` which is placed in 
 This quadlet will work out of the box but because there's no way to include secrets as part of the quadlet definition you will have to `podman exec` into the pod and change the password manually by running `pihole -a -p` to set a password. This is a one time operation.
 
 ## Prometheus
-This image installs [Promethus](https://prometheus.io/docs/introduction/overview/) on the host itself instead of using a container. Useful as a base image so observability comes baked into all your systems!
+This image installs [Prometheus](https://prometheus.io/docs/introduction/overview/) on the host itself instead of using a container. Useful as a base image so observability comes baked into all your systems!

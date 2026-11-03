@@ -64,7 +64,7 @@ RUN set -eux; \
     /usr/local/libexec/build-kmod-zfs.sh "${KMOD_KERNEL}" "${ZFS_VERSION}"
 
 # ---------------------------------------------------------------------------
-# Stage 3: production NAS image.
+# Stage 3: final NAS image.
 # ---------------------------------------------------------------------------
 FROM ${BASE_IMAGE} AS nas
 ARG COCKPIT_ZFS_VERSION=v1.3.1

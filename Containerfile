@@ -62,7 +62,8 @@ COPY observability/loki/config.yml /etc/loki
 RUN systemctl enable loki.service
 RUN bootc container lint
 
-# This image builds on observaility and combines a user-level quadlet for Nginx and a system-level quadlet for Pi-Hole in one image
+# This image builds on observability and adds a user-level quadlet for Nginx
+# and a system-level quadlet for Pi-Hole in one image
 FROM observability AS nginx
 COPY nginx/nginx.container /usr/share/containers/systemd
 COPY nginx/nginx.conf /etc/nginx

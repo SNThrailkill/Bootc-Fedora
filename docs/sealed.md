@@ -7,7 +7,7 @@ the same commands into CI.
 A sealed image boots through a fully authenticated chain:
 
 ```
-OVMF (Secure Boot, demo db key)
+OVMF (Secure Boot, db key)
   -> signed systemd-boot
     -> signed UKI (kernel + initramfs + cmdline with composefs.digest=...)
       -> initramfs mounts root as a composefs overlay with verity=require
@@ -17,7 +17,7 @@ OVMF (Secure Boot, demo db key)
 Tampering with the sealed root causes an I/O error at read time; tampering with
 the UKI or bootloader fails Secure Boot.
 
-The chain is the same three stages used by the production images:
+The chain is built in three stages:
 
 1. `seal-prep` installs the UKI toolchain, regenerates the initramfs if bootc
    changed, signs systemd-boot, scrubs the tree and splits the kernel out.

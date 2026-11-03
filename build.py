@@ -14,7 +14,6 @@ is never committed:
 
 * local demo: generated under ``target/keys/`` (gitignored)
 * GitHub Actions: repository secret ``SECUREBOOT_DB_KEY``
-* GitLab CI: masked/protected CI/CD variable ``SECUREBOOT_DB_KEY``
 
 The public certificates (``keys/PK.crt``, ``keys/KEK.crt``, ``keys/db.crt``)
 and UEFI enrollment blobs are safe to commit; the private keys are not. CI

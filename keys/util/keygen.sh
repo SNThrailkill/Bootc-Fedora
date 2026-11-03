@@ -48,7 +48,6 @@ Next steps:
      db.key loss = cannot sign new images; PK/KEK loss = cannot rotate keys.
   2. Demo builds keep the keys in target/keys (gitignored). Never commit *.key.
   3. In CI, set the db private key as the SECUREBOOT_DB_KEY secret
-     (GitHub Actions repository secret, or a masked/protected GitLab CI variable).
-     The public certificates (PK.crt, KEK.crt, db.crt) and enrollment blobs
-     (.auth) are safe to commit.
+     (GitHub Actions repository secret). The public certificates
+     (PK.crt, KEK.crt, db.crt) and enrollment blobs (.auth) are safe to commit.
 EOF
