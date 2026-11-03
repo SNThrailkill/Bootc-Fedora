@@ -29,10 +29,6 @@ on:
         description: "Use the OCI image format (required for sealed images)"
         type: boolean
         default: false
-    secrets:
-      SECUREBOOT_DB_KEY:
-        description: "PEM-encoded db private key for published sealed images"
-        required: false
 
 
 env:
