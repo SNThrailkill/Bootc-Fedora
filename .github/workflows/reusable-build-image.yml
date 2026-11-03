@@ -153,7 +153,7 @@ jobs:
             buildah tag "${tmp}" "${IMAGE_NAME}:${tag}"
           done
           rm -rf out
-          echo "Chunked image layers: $(buildah inspect --format '{{len .OCIv1.RootFS.DiffIDs}}' "${IMAGE_NAME}:${tags[0]}")"
+          echo "Chunked image ready"
 
       - name: Setup Syft
         id: setup-syft
