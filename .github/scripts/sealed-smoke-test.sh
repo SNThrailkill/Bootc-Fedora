@@ -105,9 +105,11 @@ podman_run -v "${WORK_DIR}:/output" "${BASE_REF}" \
         /output/disk.img
 echo "::notice::Phase 1 install complete; attaching ${DISK}"
 
-# Mount the installed physical root and ESP so phase 2 can target it and the
-# verification can inspect the final ESP. The installer may leave the loop
-# device attached; reuse it when present instead of racing another attach.
+# Mount the installed physical root so phase 2 can target it. The ESP is
+# mounted only after the install/upgrade, for verification, because bootc's
+# to-existing-root cleanup expects to manage the ESP itself. The installer may
+# leave the loop device attached; reuse it when present instead of racing
+# another attach.
 EXISTING_LOOP="$(sudo losetup -j "${DISK}" | awk -F: 'NR==1 {print $1}')" || true
 if [ -n "${EXISTING_LOOP}" ]; then
     LOOP="${EXISTING_LOOP}"
@@ -131,16 +133,12 @@ if [ -z "${ROOT_PART}" ] || [ -z "${ESP_PART}" ]; then
     sudo lsblk -f "${LOOP}"
     exit 1
 fi
-sudo mkdir -p "${MNT}" "${MNT}/boot"
+sudo mkdir -p "${MNT}"
 if ! sudo mount "${ROOT_PART}" "${MNT}"; then
     echo "::error::failed to mount root partition ${ROOT_PART}"
     exit 1
 fi
-if ! sudo mount "${ESP_PART}" "${MNT}/boot"; then
-    echo "::error::failed to mount ESP ${ESP_PART}"
-    exit 1
-fi
-echo "::notice::Mounted ${ROOT_PART} at ${MNT} and ${ESP_PART} at ${MNT}/boot"
+echo "::notice::Mounted ${ROOT_PART} at ${MNT}"
 
 BEFORE="$(count_deployments)"
 echo "::notice::Deployments on the installed disk before upgrade: ${BEFORE}"
@@ -173,6 +171,16 @@ if [ -n "${PREVIOUS_REF}" ]; then
 else
     echo "::notice::Install created ${BEFORE} deployment(s)"
 fi
+
+# bootc mounts the ESP inside its composefs workspace during install. Mount it
+# at the target's /boot only now, for verification; mounting it before
+# to-existing-root makes bootc's /boot/efi cleanup hit a busy directory.
+sudo mkdir -p "${MNT}/boot"
+if ! sudo mount "${ESP_PART}" "${MNT}/boot"; then
+    echo "::error::failed to mount ESP ${ESP_PART}"
+    exit 1
+fi
+echo "::notice::Mounted ${ESP_PART} at ${MNT}/boot for verification"
 
 # Verify the ESP produced by the final deployment. The cert check is not just
 # a display of the signer: sbverify --cert fails when the expected key did not
