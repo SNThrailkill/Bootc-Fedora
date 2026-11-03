@@ -86,11 +86,12 @@ podman_run -v "${WORK_DIR}:/output" "${BASE_REF}" \
     bootc install to-disk --generic-image --wipe --via-loopback \
         --target-imgref "${IMAGE}:${TAG}" \
         /output/disk.img
+echo "::notice::Phase 1 install complete; attaching ${DISK}"
 
 # Mount the installed physical root and ESP so phase 2 can target it and the
 # verification can inspect the final ESP. The installer may leave the loop
 # device attached; reuse it when present instead of racing another attach.
-EXISTING_LOOP="$(sudo losetup -j "${DISK}" | awk -F: 'NR==1 {print $1}')"
+EXISTING_LOOP="$(sudo losetup -j "${DISK}" | awk -F: 'NR==1 {print $1}')" || true
 if [ -n "${EXISTING_LOOP}" ]; then
     LOOP="${EXISTING_LOOP}"
     sudo partprobe "${LOOP}" 2>/dev/null || true
@@ -114,8 +115,15 @@ if [ -z "${ROOT_PART}" ] || [ -z "${ESP_PART}" ]; then
     exit 1
 fi
 sudo mkdir -p "${MNT}" "${MNT}/boot"
-sudo mount "${ROOT_PART}" "${MNT}"
-sudo mount "${ESP_PART}" "${MNT}/boot"
+if ! sudo mount "${ROOT_PART}" "${MNT}"; then
+    echo "::error::failed to mount root partition ${ROOT_PART}"
+    exit 1
+fi
+if ! sudo mount "${ESP_PART}" "${MNT}/boot"; then
+    echo "::error::failed to mount ESP ${ESP_PART}"
+    exit 1
+fi
+echo "::notice::Mounted ${ROOT_PART} at ${MNT} and ${ESP_PART} at ${MNT}/boot"
 
 BEFORE="$(count_deployments)"
 
@@ -123,11 +131,14 @@ if [ -n "${PREVIOUS_REF}" ]; then
     # Phase 2: apply the tested image over the existing installation. This is
     # the in-place upgrade path; it wipes /boot and adds a deployment while
     # preserving /var and the old deployment for rollback.
-    podman_run -v "${MNT}:/target" "${CURRENT_REF}" \
+    if ! podman_run -v "${MNT}:/target" "${CURRENT_REF}" \
         bootc install to-existing-root /target \
             --replace alongside --generic-image \
             --target-imgref "${IMAGE}:${TAG}" \
-            --skip-fetch-check
+            --skip-fetch-check; then
+        echo "::error::bootc install to-existing-root failed"
+        exit 1
+    fi
     AFTER="$(count_deployments)"
     if [ "${AFTER}" -le "${BEFORE}" ]; then
         echo "::error::upgrade did not add a deployment (${BEFORE} -> ${AFTER})"
