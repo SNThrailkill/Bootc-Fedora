@@ -511,10 +511,11 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
 
-      # Primary path: log signatures and attestations in the public Rekor
-      # transparency log so anyone can verify them. If Rekor is unavailable,
-      # the fallback steps sign without a tlog entry so a Rekor outage cannot
-      # block CD.
+      # Primary path: log the image signature in the public Rekor
+      # transparency log so anyone can verify it. Rekor may be unavailable or
+      # reject the request; the fallback steps sign without a tlog entry so
+      # that cannot block CD. The SBOM attestation is too large for the public
+      # Rekor v1 limit and uses the no-Rekor path by design.
       - name: Sign container image (Rekor)
         id: sign
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -569,6 +570,15 @@ jobs:
           COSIGN_TIMEOUT: 2m0s
         run: |
           set -euo pipefail
+          # The public Rekor v1 instance caps attestation uploads at 100 KB.
+          # A full OS SPDX SBOM is tens of MB, so this path is expected to
+          # fall back to the OCI-only attestation below. Keep the attempt so a
+          # future smaller SBOM can still be transparently logged.
+          sbom_bytes="$(stat -c%s sbom.json)"
+          if [ "${sbom_bytes}" -gt 100000 ]; then
+            echo "::warning::SBOM is ${sbom_bytes} bytes, over the public Rekor v1 100 KB attestation limit; using the no-Rekor attestation path"
+            exit 1
+          fi
           for attempt in 1 2 3; do
             if cosign attest -y \
               --signing-config .github/cosign/signing-config-rekor.json \
@@ -631,15 +641,20 @@ jobs:
             "${IMAGE}@${DIGEST}" >/dev/null
 
       - name: Verify Rekor entries
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.sign.outcome == 'success' && steps.attest.outcome == 'success'
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         continue-on-error: true
         env:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          ATTEST_OUTCOME: ${{ steps.attest.outcome }}
           COSIGN_TIMEOUT: 5m0s
         run: |
           # Optional when Rekor is reachable; the offline verification above
           # is the blocking check. A Rekor outage must not fail CI.
           cosign verify --key cosign.pub "${IMAGE}@${DIGEST}" >/dev/null
-          cosign verify-attestation --key cosign.pub --type spdxjson \
-            "${IMAGE}@${DIGEST}" >/dev/null
+          if [ "${ATTEST_OUTCOME}" = "success" ]; then
+            cosign verify-attestation --key cosign.pub --type spdxjson \
+              "${IMAGE}@${DIGEST}" >/dev/null
+          else
+            echo "::notice::SBOM attestation used the no-Rekor fallback; only the image signature Rekor entry was verified"
+          fi

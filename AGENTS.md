@@ -29,10 +29,11 @@
 - `build-artifact.yml` uses `osbuild/image-builder-action`, pinned to a `main` commit because upstream has no tagged releases yet. Unlike the archived bootc-image-builder action, it has no config-file/additional-args inputs, so the old root-size customization and `--use-librepo` are not carried over.
 
 ## Rekor (sigstore transparency log)
-- Public images are signed and attested with the public Rekor log enabled, so anyone can verify the signature/attestation and its transparency-log entry. The primary steps use `.github/cosign/signing-config-rekor.json`.
-- Rekor is a shared service and can be unavailable. The primary signing/attestation steps are `continue-on-error`; on failure, fallback steps use `.github/cosign/signing-config-no-rekor.json` and sign anyway, with a warning that no transparency-log entry exists. A Rekor outage therefore cannot block CD.
-- Offline signature and attestation verification are enforced against the committed `cosign.pub`. A separate optional Rekor verification runs when the primary Rekor path succeeded and is non-blocking.
-- Verify images with `cosign verify --key cosign.pub <image>`; if signed via the fallback, use `--insecure-ignore-tlog=true`. Attestations: `cosign verify-attestation --key cosign.pub --type spdxjson <image>`.
+- Public images are signed with the public Rekor log enabled, so anyone can verify the image signature and its transparency-log entry. Signing uses `.github/cosign/signing-config-rekor.json`.
+- The full SPDX SBOM is tens of MB, while the public Rekor v1 instance caps attestation uploads at 100 KB. The SBOM attestation therefore always uses `.github/cosign/signing-config-no-rekor.json`, is stored in OCI alongside the image, and is verified offline with `--insecure-ignore-tlog=true`. Only a future SBOM below the limit would attempt a Rekor attestation.
+- Rekor is a shared service and can be unavailable. The image signature step retries three times, then falls back to the no-Rekor config with a warning, so a Rekor outage cannot block CD.
+- Offline image-signature and attestation verification are enforced against the committed `cosign.pub`. A separate optional Rekor image-signature verification runs on `main` and is non-blocking.
+- Verify images with `cosign verify --key cosign.pub <image>`; if signed via the fallback, use `--insecure-ignore-tlog=true`. Attestations: `cosign verify-attestation --key cosign.pub --insecure-ignore-tlog=true --type spdxjson <image>`.
 
 ## Known issue: prometheus build target fails dnf install of loki/grafana
 - The `prometheus` Containerfile stage pulls the grafana yum repo and runs `dnf install loki grafana -y`, which failed with a Curl SSL CA cert error reaching `https://rpm.grafana.com/repodata/repomd.xml`. The grafana repo config points `sslcacert` at `/etc/pki/tls/certs/ca-bundle.crt`, which must exist/populated before dnf runs.

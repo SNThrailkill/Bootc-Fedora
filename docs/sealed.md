@@ -105,12 +105,14 @@ The test does not trust the local build alone:
    previous good image in place.
 
 PR builds run the same install/upgrade checks against the local OCI archive
-because they are not published. The SBOM is generated from that archive.
-Signing and SBOM attestations go to the public Rekor log by default; if Rekor
-is unavailable they fall back to no-Rekor signing with a warning
-(non-blocking). Offline signature/attestation verification is enforced, the
-optional Rekor-entry check is non-blocking, and the sealed smoke test is
-enforced.
+because they are not published. The SBOM is generated from that archive. Image
+signatures go to the public Rekor log by default; if Rekor is unavailable they
+fall back to no-Rekor signing with a warning (non-blocking). The full SPDX SBOM
+is far above the public Rekor v1 100 KB attestation limit, so the SBOM
+attestation is stored in OCI and verified offline with
+`--insecure-ignore-tlog=true`. Offline signature/attestation verification is
+enforced, the optional Rekor-entry check is non-blocking, and the sealed smoke
+test is enforced.
 
 ## CI secrets
 
