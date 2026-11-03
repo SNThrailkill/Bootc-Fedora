@@ -152,15 +152,13 @@ jobs:
           for tag in "${tags[@]}"; do
             buildah tag "${tmp}" "${IMAGE_NAME}:${tag}"
           done
-          rm -rf out
           echo "Chunked image ready"
 
       - name: Setup Syft
         id: setup-syft
-        if: false
         uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # v0
         with:
-          syft-version: v1.20.0
+          syft-version: v1.42.3
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
@@ -173,14 +171,14 @@ jobs:
 
       - name: Generate SBOM
         id: generate-sbom
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
-          format: spdx-json
-          output-file: "sbom.json"
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN  }}
-      
+        run: |
+          set -euo pipefail
+          # Scan the chunkah OCI layout, not the registry's previous image.
+          # The pushed image is imported from this layout, so the SBOM covers
+          # the image this run actually ships.
+          syft scan "oci-dir:out" -o "spdx-json=sbom.json"
+          rm -rf out
+
       - name: Scan SBOM for vulnerabilities
         id: scan
         uses: anchore/scan-action@v6
