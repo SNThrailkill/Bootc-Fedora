@@ -83,9 +83,11 @@ image into content-based layers, and runs a loopback `bootc install` smoke
 test on that chunked image. That test fails unless every digest embedded in
 the signed UKI matches the EROFS image bootc generates from the pulled
 layers, so it proves the seal end to end. The SBOM is generated from the
-chunked OCI archive. The signing and SBOM-attestation steps use the
-no-Rekor config and are `continue-on-error`; the seal smoke test is enforced
-and is not.
+chunked OCI archive. Signing and SBOM attestations go to the public Rekor
+log by default; if Rekor is unavailable they fall back to no-Rekor signing
+with a warning (non-blocking). Offline signature/attestation verification is
+enforced, the optional Rekor-entry check is non-blocking, and the seal smoke
+test is enforced.
 
 ## CI secrets
 

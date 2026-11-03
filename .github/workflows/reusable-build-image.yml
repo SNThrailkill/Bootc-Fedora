@@ -384,33 +384,45 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
 
-      - name: Sign container image
+      # Primary path: log signatures and attestations in the public Rekor
+      # transparency log so anyone can verify them. If Rekor is unavailable,
+      # the fallback steps sign without a tlog entry so a Rekor outage cannot
+      # block CD.
+      - name: Sign container image (Rekor)
+        id: sign
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        # Signing is intentionally non-blocking; the seal itself is enforced
-        # by the loopback install smoke test above, not by Rekor.
         continue-on-error: true
-        run: |
-          # The vendored signing config has no Rekor transparency-log service,
-          # so signatures are stored only in the OCI registry. Verify with
-          # `cosign verify --insecure-ignore-tlog=true`. Rekor
-          # (rekor.sigstore.dev) is a shared, intermittently-flaky service and
-          # is not needed for the key-based signer.
-          IMAGE_FULL="${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}"
-          # Sign the pushed digest, not the mutable tag, so the signature is
-          # attached to exactly the chunked image this run produced.
-          cosign sign -y \
-            --signing-config .github/cosign/signing-config.json \
-            --key env://COSIGN_PRIVATE_KEY \
-            "${IMAGE_FULL}@${DIGEST}"
         env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          # Sign the pushed digest, not the mutable tag, so the signature is
+          # attached to exactly the chunked image this run produced.
+          cosign sign -y \
+            --signing-config .github/cosign/signing-config-rekor.json \
+            --key env://COSIGN_PRIVATE_KEY \
+            "${IMAGE}@${DIGEST}"
 
-      - name: Add SBOM Attestation
+      - name: Sign container image (no Rekor fallback)
+        id: sign-fallback
+        if: steps.sign.outcome == 'failure'
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          COSIGN_EXPERIMENTAL: false
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          echo "::warning::Rekor signing failed; signing without a transparency-log entry"
+          cosign sign -y \
+            --signing-config .github/cosign/signing-config-no-rekor.json \
+            --key env://COSIGN_PRIVATE_KEY \
+            "${IMAGE}@${DIGEST}"
+
+      - name: Attest SBOM (Rekor)
+        id: attest
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        # Non-blocking for the same reason as signing; seal verification is
-        # enforced earlier in the job.
         continue-on-error: true
         env:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
@@ -418,12 +430,63 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           COSIGN_TIMEOUT: 5m0s
         run: |
-          # No Rekor service in the signing config; the attestation is stored
-          # in the OCI registry alongside the image. Verify with
-          # `cosign verify-attestation --insecure-ignore-tlog=true`.
           cosign attest -y \
-            --signing-config .github/cosign/signing-config.json \
+            --signing-config .github/cosign/signing-config-rekor.json \
             --predicate ./sbom.json \
             --type spdxjson \
             --key env://COSIGN_PRIVATE_KEY \
             "${IMAGE}@${DIGEST}"
+
+      - name: Attest SBOM (no Rekor fallback)
+        id: attest-fallback
+        if: steps.attest.outcome == 'failure'
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_TIMEOUT: 5m0s
+        run: |
+          echo "::warning::Rekor attestation failed; attesting without a transparency-log entry"
+          cosign attest -y \
+            --signing-config .github/cosign/signing-config-no-rekor.json \
+            --predicate ./sbom.json \
+            --type spdxjson \
+            --key env://COSIGN_PRIVATE_KEY \
+            "${IMAGE}@${DIGEST}"
+
+      - name: Verify image signature
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (steps.sign.outcome == 'success' || steps.sign-fallback.outcome == 'success')
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          # Enforced: the signature must verify against the committed public key.
+          cosign verify \
+            --key cosign.pub \
+            --insecure-ignore-tlog=true \
+            "${IMAGE}@${DIGEST}"
+
+      - name: Verify SBOM attestation
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (steps.attest.outcome == 'success' || steps.attest-fallback.outcome == 'success')
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          # Enforced: the SBOM attestation must verify against cosign.pub.
+          cosign verify-attestation \
+            --key cosign.pub \
+            --insecure-ignore-tlog=true \
+            --type spdxjson \
+            "${IMAGE}@${DIGEST}"
+
+      - name: Verify Rekor entries
+        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.sign.outcome == 'success' && steps.attest.outcome == 'success'
+        continue-on-error: true
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          # Optional when Rekor is reachable; the offline verification above
+          # is the blocking check. A Rekor outage must not fail CI.
+          cosign verify --key cosign.pub "${IMAGE}@${DIGEST}"
+          cosign verify-attestation --key cosign.pub --type spdxjson "${IMAGE}@${DIGEST}"
