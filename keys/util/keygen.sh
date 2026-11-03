@@ -49,5 +49,6 @@ Next steps:
   2. Demo builds keep the keys in target/keys (gitignored). Never commit *.key.
   3. In CI, set the db private key as the SECUREBOOT_DB_KEY secret
      (GitHub Actions repository secret, or a masked/protected GitLab CI variable).
-     The public certificate (db.crt) and enrollment blobs (.auth) are safe to commit.
+     The public certificates (PK.crt, KEK.crt, db.crt) and enrollment blobs
+     (.auth) are safe to commit.
 EOF

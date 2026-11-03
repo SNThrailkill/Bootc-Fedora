@@ -586,25 +586,30 @@ jobs:
         env:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          COSIGN_TIMEOUT: 5m0s
         run: |
           # Enforced: the signature must verify against the committed public key.
+          # The JSON payload is not useful in CI; only the exit status matters.
           cosign verify \
             --key cosign.pub \
             --insecure-ignore-tlog=true \
-            "${IMAGE}@${DIGEST}"
+            "${IMAGE}@${DIGEST}" >/dev/null
 
       - name: Verify SBOM attestation
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (steps.attest.outcome == 'success' || steps.attest-fallback.outcome == 'success')
         env:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          COSIGN_TIMEOUT: 5m0s
         run: |
           # Enforced: the SBOM attestation must verify against cosign.pub.
+          # cosign prints the full SPDX payload (tens of MB); only the status
+          # is useful here, and streaming it into the Actions log is slow.
           cosign verify-attestation \
             --key cosign.pub \
             --insecure-ignore-tlog=true \
             --type spdxjson \
-            "${IMAGE}@${DIGEST}"
+            "${IMAGE}@${DIGEST}" >/dev/null
 
       - name: Verify Rekor entries
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.sign.outcome == 'success' && steps.attest.outcome == 'success'
@@ -612,8 +617,10 @@ jobs:
         env:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
+          COSIGN_TIMEOUT: 5m0s
         run: |
           # Optional when Rekor is reachable; the offline verification above
           # is the blocking check. A Rekor outage must not fail CI.
-          cosign verify --key cosign.pub "${IMAGE}@${DIGEST}"
-          cosign verify-attestation --key cosign.pub --type spdxjson "${IMAGE}@${DIGEST}"
+          cosign verify --key cosign.pub "${IMAGE}@${DIGEST}" >/dev/null
+          cosign verify-attestation --key cosign.pub --type spdxjson \
+            "${IMAGE}@${DIGEST}" >/dev/null
