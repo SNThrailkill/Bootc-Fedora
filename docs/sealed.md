@@ -78,16 +78,18 @@ target directly: `SEALED_FROM=nginx` makes the content stage and the seal
 chain part of one Containerfile invocation, with no dependency on the
 unsealed `build-nginx` job or a published base image.
 
-CI generates an ephemeral demo key, builds `nginx:sealed`, chunkahs the sealed
-image into content-based layers, and runs a loopback `bootc install` smoke
-test on that chunked image. That test fails unless every digest embedded in
-the signed UKI matches the EROFS image bootc generates from the pulled
-layers, so it proves the seal end to end. The SBOM is generated from the
-chunked OCI archive. Signing and SBOM attestations go to the public Rekor
-log by default; if Rekor is unavailable they fall back to no-Rekor signing
-with a warning (non-blocking). Offline signature/attestation verification is
-enforced, the optional Rekor-entry check is non-blocking, and the seal smoke
-test is enforced.
+CI generates an ephemeral demo key, builds `nginx:sealed`, and runs a
+loopback `bootc install` smoke test on the flat sealed image. That test fails
+unless every digest embedded in the signed UKI matches the EROFS image bootc
+generates from the pulled layers, so it proves the seal end to end. Sealed
+images are deliberately not chunked: chunkah's re-layering does not preserve
+the xattrs/EROFS metadata covered by the composefs digest, and the loopback
+test fails with a digest mismatch when it is applied. Unsealed images are
+chunked. The SBOM is generated from the sealed OCI archive. Signing and SBOM
+attestations go to the public Rekor log by default; if Rekor is unavailable
+they fall back to no-Rekor signing with a warning (non-blocking). Offline
+signature/attestation verification is enforced, the optional Rekor-entry
+check is non-blocking, and the seal smoke test is enforced.
 
 ## CI secrets
 
