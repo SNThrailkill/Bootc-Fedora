@@ -20,9 +20,11 @@
 - Sealed images (`nginx-sealed`) use a demo key hierarchy under `target/keys/` (gitignored). `./build.py keygen --demo` creates it; `./build.py seal --image nginx-sealed --tag demo` builds; `verify` inspects the signed UKI. Real keys go to the `SECUREBOOT_DB_KEY` secret; never commit `db.key`. See `docs/sealed.md`.
 
 ## Dependency management
-- **Renovate** is the dependency manager (see `renovate.json`). Configured to manage `github-actions` and `dockerfile` dependencies, grouped, with a Monday schedule and a dependency dashboard. Major docker base-image bumps require dashboard approval.
+- **Renovate** is the dependency manager (see `renovate.json`). Configured to manage `github-actions`, `dockerfile`, and custom regex pins, grouped, with a Monday schedule and a dependency dashboard. Major docker base-image and action bumps require dashboard approval.
+- Custom regex managers track the chunkah image in `reusable-build-image.yml`, the k3s/OpenZFS/Cockpit ZFS pins in the Containerfiles, the Syft download, and the Prometheus release ARG.
 - Dependabot was removed (its config had an empty `package-ecosystem` and would have conflicted with Renovate).
-- GitHub Actions are pinned by digest; Renovate keeps both digest and version tag up to date.
+- GitHub Actions are pinned by digest; Renovate keeps both digest and version tag up to date. Routine action updates are grouped and automerged after CI; majors are manual.
+- `osbuild/bootc-image-builder-action` is archived upstream and has no Node 24 release; it is pinned to its final `main` commit. Migrate `build-artifact.yml` to `osbuild/image-builder-action` separately (different inputs).
 
 ## Known issue: Rekor (sigstore transparency log) flakiness
 - The public Rekor instance (`rekor.sigstore.dev`) is a shared service with a 99.5% SLO and is intermittently unavailable. Since cosign 2.0, `cosign sign` and `cosign attest` upload to it by default even for key-based signing, so a Rekor outage fails the pipeline with `Post "https://rekor.sigstore.dev/api/v1/log/entries": ... giving up after 4 attempt(s)`.

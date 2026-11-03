@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended",
     ":dependencyDashboard",
+    "docker:pinDigests",
     "helpers:pinGitHubActionDigests"
   ],
   "schedule": [
@@ -12,25 +13,128 @@
   "labels": [
     "dependencies"
   ],
-  "github-actions": {
-    "enabled": true,
-    "commitMessageAction": "Update",
-    "groupName": "github-actions"
-  },
-  "dockerfile": {
-    "enabled": true
-  },
-  "docker-compose": {
-    "enabled": true
-  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "chunkah image used to rechunk bootc images",
+      "managerFilePatterns": [
+        ".github/workflows/reusable-build-image.yml"
+      ],
+      "matchStrings": [
+        "CHUNKAH=(?<depName>[^:\\s]+):(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "k3s release pinned in k3s/Containerfile",
+      "managerFilePatterns": [
+        "k3s/Containerfile"
+      ],
+      "matchStrings": [
+        "ARG K3S_VERSION=(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "k3s-io/k3s",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "OpenZFS release pinned in nas/Containerfile (tags are zfs-X.Y.Z)",
+      "managerFilePatterns": [
+        "nas/Containerfile"
+      ],
+      "matchStrings": [
+        "ARG ZFS_VERSION=(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "openzfs/zfs",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^zfs-(?<version>\\d+\\.\\d+\\.\\d+)$",
+      "autoReplaceStringTemplate": "ARG ZFS_VERSION={{{newVersion}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Cockpit ZFS manager pinned in nas/Containerfile",
+      "managerFilePatterns": [
+        "nas/Containerfile"
+      ],
+      "matchStrings": [
+        "ARG COCKPIT_ZFS_VERSION=(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "45Drives/cockpit-zfs-manager",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Syft version downloaded by anchore/sbom-action",
+      "managerFilePatterns": [
+        ".github/workflows/reusable-build-image.yml"
+      ],
+      "matchStrings": [
+        "syft-version:\\s*(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "anchore/syft",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Prometheus release pinned in the prometheus stage",
+      "managerFilePatterns": [
+        "Containerfile"
+      ],
+      "matchStrings": [
+        "ARG PROMETHEUS_VERSION=(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "prometheus/prometheus",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "autoReplaceStringTemplate": "ARG PROMETHEUS_VERSION={{{newVersion}}}"
+    }
+  ],
   "packageRules": [
     {
+      "description": "Batch routine GitHub Actions updates and merge them after CI passes",
       "matchManagers": [
         "github-actions"
       ],
-      "groupName": "GitHub Actions"
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest"
+      ],
+      "groupName": "GitHub Actions",
+      "automerge": true
     },
     {
+      "description": "Keep action major upgrades manual",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "GitHub Actions (major)",
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Batch docker digest refreshes; the build job validates the result",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "Container image digests",
+      "automerge": true
+    },
+    {
+      "description": "Major container image bumps need dashboard approval",
       "matchDatasources": [
         "docker"
       ],
@@ -38,6 +142,59 @@
         "major"
       ],
       "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Group routine Containerfile and workflow version pins; these need a build run",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Container version pins"
+    },
+    {
+      "description": "Major container version pins stay separate and manual",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "Container version pins (major)",
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "The splitter's placeholder stages (overridden, oci:out) are not real images; the chunkah pin is managed from the workflow",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchFileNames": [
+        ".github/chunkah/Containerfile.splitter"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The Dockerfile syntax frontend is intentionally a rolling major tag",
+      "matchPackageNames": [
+        "docker/dockerfile"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "The k3s image deliberately follows this repo's own base:latest, so do not pin or update it",
+      "matchPackageNames": [
+        "ghcr.io/snthrailkill/bootc-fedora/base"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Archived upstream and pinned to its final main commit; migrate to osbuild/image-builder-action separately",
+      "matchPackageNames": [
+        "osbuild/bootc-image-builder-action"
+      ],
+      "enabled": false
     }
   ]
 }
