@@ -181,13 +181,13 @@ jobs:
           # buildah-build v3 squashes by default; keep v2's layered output.
           squash: false
 
-      # Split the Dockerfile layers into content-based layers so bootc hosts
-      # only pull the layers that changed. The splitter prunes the OSTree
-      # /sysroot data and drops the OSTree labels, leaving a plain bootc image
-      # with containers.bootc=1 intact.
+      # Split the image into content-based layers so bootc hosts only pull the
+      # layers that changed. This applies to sealed images too: the seal is
+      # content-based (the UKI embeds the composefs digest), and the loopback
+      # install test below runs on the chunked image and fails if chunking
+      # breaks the digest.
       - name: Rechunk image with chunkah
         id: chunkah
-        if: ${{ !inputs.sealed }}
         env:
           TAGS: ${{ steps.metadata.outputs.tags }}
         run: |
@@ -287,6 +287,7 @@ jobs:
             # Scan the exact sealed OCI archive that the smoke test installed.
             syft scan "oci-archive:${RUNNER_TEMP}/image.tar" -o "spdx-json=sbom.json"
             rm -f "${RUNNER_TEMP}/image.tar"
+            rm -rf out
           else
             # Scan the chunkah OCI layout, not the registry's previous image.
             # The pushed image is imported from this layout.

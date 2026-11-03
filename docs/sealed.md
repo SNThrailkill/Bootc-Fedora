@@ -78,13 +78,14 @@ target directly: `SEALED_FROM=nginx` makes the content stage and the seal
 chain part of one Containerfile invocation, with no dependency on the
 unsealed `build-nginx` job or a published base image.
 
-CI generates an ephemeral demo key, builds `nginx:sealed`, and runs a
-loopback `bootc install` smoke test. That test fails unless every digest
-embedded in the signed UKI matches the EROFS image bootc generates from the
-pulled layers, so it proves the seal end to end. Chunkah is skipped for
-sealed images; the SBOM is generated from the sealed OCI archive. The
-signing and SBOM-attestation steps use the no-Rekor config and are
-`continue-on-error`; the seal smoke test is enforced and is not.
+CI generates an ephemeral demo key, builds `nginx:sealed`, chunkahs the sealed
+image into content-based layers, and runs a loopback `bootc install` smoke
+test on that chunked image. That test fails unless every digest embedded in
+the signed UKI matches the EROFS image bootc generates from the pulled
+layers, so it proves the seal end to end. The SBOM is generated from the
+chunked OCI archive. The signing and SBOM-attestation steps use the
+no-Rekor config and are `continue-on-error`; the seal smoke test is enforced
+and is not.
 
 ## CI secrets
 
