@@ -27,9 +27,9 @@
 - `osbuild/bootc-image-builder-action` is archived upstream and has no Node 24 release; it is pinned to its final `main` commit. Migrate `build-artifact.yml` to `osbuild/image-builder-action` separately (different inputs).
 
 ## Known issue: Rekor (sigstore transparency log) flakiness
-- The public Rekor instance (`rekor.sigstore.dev`) is a shared service with a 99.5% SLO and is intermittently unavailable. Since cosign 2.0, `cosign sign` and `cosign attest` upload to it by default even for key-based signing, so a Rekor outage fails the pipeline with `Post "https://rekor.sigstore.dev/api/v1/log/entries": ... giving up after 4 attempt(s)`.
-- This is widely reported (sigstore/cosign#3602, GitHub community discussions#144833) and transient.
-- Fix applied in `reusable-build-image.yml`: both the `Sign container image` and `Add SBOM Attestation` steps always run with `--tlog-upload=false`. The signature/attestation is stored in the OCI registry alongside the image (where it can be verified manually); the public Rekor transparency-log entry is skipped entirely. This trades off the public audit record for a reliable build.
+- The public Rekor instance (`rekor.sigstore.dev`) is a shared service with a 99.5% SLO and is intermittently unavailable. cosign uploads to it by default even for key-based signing, so a Rekor outage fails the pipeline.
+- cosign v3 (installed by `cosign-installer` v4) rejects `--tlog-upload=false` while the default signing config is active.
+- Fix applied in `reusable-build-image.yml`: `.github/cosign/signing-config.json` is the sigstore root-signing config with the Rekor entries removed, passed via `--signing-config` to both `cosign sign` and `cosign attest`. The signature/attestation is stored in the OCI registry alongside the image; there is no public transparency-log entry.
 - Verify images signed this way with `cosign verify --key cosign.pub --insecure-ignore-tlog=true ...` (and `cosign verify-attestation --insecure-ignore-tlog=true ...` for attestations).
 
 ## Known issue: prometheus build target fails dnf install of loki/grafana

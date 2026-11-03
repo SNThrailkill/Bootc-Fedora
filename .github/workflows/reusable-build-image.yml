@@ -273,18 +273,20 @@ jobs:
       - name: Sign container image
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
-          # Skip the public Rekor transparency log upload. The signature is
-          # stored in the OCI registry alongside the image, where it can be
-          # verified manually with `cosign verify --insecure-ignore-tlog=true`.
-          # Rekor (rekor.sigstore.dev) is a shared, intermittently-flaky
-          # service whose outages were failing this step; it isn't needed for
-          # the key-based signer.
+          # The vendored signing config has no Rekor transparency-log service,
+          # so signatures are stored only in the OCI registry. Verify with
+          # `cosign verify --insecure-ignore-tlog=true`. Rekor
+          # (rekor.sigstore.dev) is a shared, intermittently-flaky service and
+          # is not needed for the key-based signer.
           IMAGE_FULL="${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}"
-          for tag in ${{ steps.metadata.outputs.tags }}; do
-            cosign sign -y --tlog-upload=false --key env://COSIGN_PRIVATE_KEY $IMAGE_FULL:$tag
-          done
+          # Sign the pushed digest, not the mutable tag, so the signature is
+          # attached to exactly the chunked image this run produced.
+          cosign sign -y \
+            --signing-config .github/cosign/signing-config.json \
+            --key env://COSIGN_PRIVATE_KEY \
+            "${IMAGE_FULL}@${DIGEST}"
         env:
-          TAGS: ${{ steps.push.outputs.digest }}
+          DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
 
@@ -296,14 +298,11 @@ jobs:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           COSIGN_TIMEOUT: 5m0s
         run: |
-          # Skip the public Rekor transparency log upload. The attestation is
-          # stored in the OCI registry alongside the image, where it can be
-          # verified manually with `cosign verify-attestation
-          # --insecure-ignore-tlog=true`. Rekor (rekor.sigstore.dev) is a
-          # shared, intermittently-flaky service whose outages were failing
-          # this step; it isn't needed for the key-based signer.
+          # No Rekor service in the signing config; the attestation is stored
+          # in the OCI registry alongside the image. Verify with
+          # `cosign verify-attestation --insecure-ignore-tlog=true`.
           cosign attest -y \
-            --tlog-upload=false \
+            --signing-config .github/cosign/signing-config.json \
             --predicate ./sbom.json \
             --type spdxjson \
             --key env://COSIGN_PRIVATE_KEY \
