@@ -3,4 +3,6 @@ cosign.key
 target/
 out/
 __pycache__/
-keys/auth/auto/*.auth
+# Public Secure Boot material is committed: keys/{PK,KEK,db}.crt and the
+# enrollment blobs in keys/auth/auto/. Private keys live under target/.
+keys/**/*.key

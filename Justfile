@@ -41,7 +41,9 @@ verify image="nginx-sealed" tag="demo":
 test:
     python3 -m unittest discover -s tests -v
 
-# Sealed images are stage 2. Demo keys live in target/keys/ and are gitignored.
-# Never commit db.key. In CI, add the db private key as a secret:
-#   GitHub Actions: SECUREBOOT_DB_KEY repository secret
+# Sealed images use a key hierarchy in target/keys/ (gitignored). Never commit
+# *.key. For a stable published key:
+#   GitHub Actions: SECUREBOOT_DB_KEY repository secret + committed keys/db.crt
 #   GitLab CI:      SECUREBOOT_DB_KEY masked + protected CI/CD variable
+# `build.py keygen --demo --with-auth` refreshes the public keys/*.crt and
+# keys/auth/auto/*.auth blobs after generating a new hierarchy.

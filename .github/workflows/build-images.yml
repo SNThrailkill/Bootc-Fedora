@@ -17,68 +17,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-base:
-    name: Build Base Image
-    uses: ./.github/workflows/reusable-build-image.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-    with:
-      build_target: base
+  # The image table in build.py is the source of truth. This job turns it into
+  # the reusable-workflow matrix so adding an image does not require editing
+  # the workflow.
+  matrix:
+    name: Compute image matrix
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      include: ${{ steps.matrix.outputs.include }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build matrix from build.py
+        id: matrix
+        run: echo "include=$(./build.py matrix --compact)" >> "$GITHUB_OUTPUT"
 
-  build-nginx:
-    name: Build Nginx Image
+  build:
+    name: Build ${{ matrix.image }}
+    needs: matrix
     uses: ./.github/workflows/reusable-build-image.yml
     secrets: inherit
     strategy:
       fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
     with:
-      build_target: nginx
-
-  # Seal the nginx content stage in one build from the beginning. This does
-  # not depend on build-nginx or a published base image: SEALED_FROM=nginx
-  # makes the `sealed` target build the content stage and the seal chain in
-  # the same Containerfile invocation. The loopback install smoke test in the
-  # reusable workflow fails the job if the seal does not verify.
-  build-nginx-sealed:
-    name: Build Nginx Sealed Image
-    uses: ./.github/workflows/reusable-build-image.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-    with:
-      build_target: sealed
-      build_args: SEALED_FROM=nginx
-      image_name: nginx
-      tag_override: sealed
-      sealed: true
-      oci: true
-
-  build-k3s:
-    name: Build K3s Image
-    uses: ./.github/workflows/reusable-build-image.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-    with:
-      build_target: k3s
-      containerfile: ./k3s/Containerfile
-
-  build-prometheus:
-    name: Build Prometheus Image
-    uses: ./.github/workflows/reusable-build-image.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-    with:
-      build_target: prometheus
-
-  build-nas:
-    name: Build NAS Image
-    uses: ./.github/workflows/reusable-build-image.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-    with:
-      build_target: nas
-      containerfile: ./nas/Containerfile
+      build_target: ${{ matrix.build_target }}
+      containerfile: ${{ matrix.containerfile }}
+      image_name: ${{ matrix.image_name }}
+      tag_override: ${{ matrix.tag_override }}
+      build_args: ${{ matrix.build_args }}
+      sealed: ${{ matrix.sealed }}
+      oci: ${{ matrix.oci }}

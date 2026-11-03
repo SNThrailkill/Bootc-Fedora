@@ -6,8 +6,9 @@
 #   db  - Signature Database key: signs systemd-boot + UKIs (the day-to-day key)
 #
 # Output goes to KEYS_DIR (default target/keys/, which is gitignored).
-# Private keys never leave that directory; only db.crt, GUID.txt and the
-# derived keys/auth/auto/*.auth enrollment blobs are committed (all public).
+# Private keys never leave that directory; only the public PK/KEK/db
+# certificates and the derived keys/auth/auto/*.auth enrollment blobs are
+# committed (all public).
 #
 # Keys are RSA-4096, self-signed, 10-year validity. Re-running is a no-op
 # for keys that already exist.

@@ -35,9 +35,9 @@ The chain is the same three stages used by the production images:
 This creates PK, KEK and db keys under `target/keys/` (gitignored), using
 `keys/util/keygen.sh`. The db key signs systemd-boot and every UKI.
 
-**Never commit `target/keys/*.key`.** The public certificate (`keys/db.crt`)
-and the UEFI enrollment blobs (`keys/auth/auto/*.auth`) are safe to commit; the
-private key is not.
+**Never commit `target/keys/*.key`.** The public certificates
+(`keys/PK.crt`, `keys/KEK.crt`, `keys/db.crt`) and the UEFI enrollment blobs
+(`keys/auth/auto/*.auth`) are safe to commit; the private keys are not.
 
 For a Secure Boot VM boot, also generate the enrollment blobs:
 
@@ -46,9 +46,10 @@ For a Secure Boot VM boot, also generate the enrollment blobs:
 ```
 
 This runs `keys/util/gen-auth.sh` in a Fedora container because it needs
-`sbsigntools`. For a real deployment, use `keys/util/keygen.sh` directly, back
-up the private keys and `GUID.txt` offline, and rotate before the certificates
-expire.
+`sbsigntools`. It also copies the public `PK.crt`, `KEK.crt` and `db.crt` into
+`keys/` so the committed certificates and enrollment blobs stay consistent.
+For a real deployment, use `keys/util/keygen.sh` directly, back up the private
+keys and `GUID.txt` offline, and rotate before the certificates expire.
 
 ## Build and verify
 
@@ -64,47 +65,71 @@ expire.
 - `--secret id=secureboot_cert,src=target/keys/db.crt`
 - `--device /dev/fuse --cap-add=all` and an SELinux label
 
-`verify` runs inside the built image and checks the signed UKI, the signed
-systemd-boot, the UKI cmdline (including the composefs digest), the bootc
-version, and the sealed install config files.
+`verify` runs inside the built image. It prints the signatures with
+`sbverify --list` for diagnostics, then **enforces** the expected key with
+`sbverify --cert /keys/db.crt` for both the UKI and systemd-boot. It also checks
+the UKI cmdline contains `composefs.digest`, the bootc version, the sealed
+install config files, and that the `PK/KEK/db.auth` blobs are present. Use
+`--key-dir` if the signing certificate is not in `target/keys/`.
 
 Sealed builds currently require podman. `./build.py doctor` checks for podman
 and `/dev/fuse` before the workshop.
 
 ## CI
 
-`build-images.yml` has a `build-nginx-sealed` job that builds the `sealed`
-target directly: `SEALED_FROM=nginx` makes the content stage and the seal
-chain part of one Containerfile invocation, with no dependency on the
-unsealed `build-nginx` job or a published base image.
+`build-images.yml` runs `./build.py matrix` and passes each entry to the
+reusable workflow. The sealed entry builds the `sealed` target directly:
+`SEALED_FROM=nginx` makes the content stage and the seal chain part of one
+Containerfile invocation, with no dependency on the unsealed `nginx` job or a
+published base image.
 
-CI generates an ephemeral demo key, builds `nginx:sealed`, and runs a
-loopback `bootc install` smoke test on the flat sealed image. That test fails
-unless every digest embedded in the signed UKI matches the EROFS image bootc
-generates from the pulled layers, so it proves the seal end to end. Sealed
-images are deliberately not chunked: chunkah's re-layering does not preserve
-the xattrs/EROFS metadata covered by the composefs digest, and the loopback
-test fails with a digest mismatch when it is applied. Unsealed images are
-chunked. The SBOM is generated from the sealed OCI archive. Signing and SBOM
-attestations go to the public Rekor log by default; if Rekor is unavailable
-they fall back to no-Rekor signing with a warning (non-blocking). Offline
-signature/attestation verification is enforced, the optional Rekor-entry
-check is non-blocking, and the seal smoke test is enforced.
+On `main`, CI uses the repository Secure Boot key (`SECUREBOOT_DB_KEY`) and the
+committed `keys/db.crt`. It refuses to publish a sealed image with an ephemeral
+key unless the `ALLOW_EPHEMERAL_SEAL_KEY` repository variable is set to `true`;
+PR builds use an ephemeral key because they are not published. The build stays
+flat (chunkah is disabled) because chunkah's re-layering does not preserve the
+xattrs/EROFS metadata covered by the composefs digest.
+
+The test does not trust the local build alone:
+
+1. CI tags the sealed image as `sealed-candidate` and pushes it.
+2. It pulls that exact registry digest into podman.
+3. It installs a previous `:sealed` image when one exists, then applies the
+   candidate over it with `bootc install to-existing-root --replace
+   alongside`. This is the in-place upgrade path: the old deployment is kept
+   and a new one is added.
+4. It verifies the new UKI and systemd-boot with `sbverify --cert`, checks the
+   `composefs.digest` string, and checks the `PK/KEK/db.auth` enrollment blobs
+   on the ESP.
+5. Only then does it push the public `:sealed` tag. A failing test leaves the
+   previous good image in place.
+
+PR builds run the same install/upgrade checks against the local OCI archive
+because they are not published. The SBOM is generated from that archive.
+Signing and SBOM attestations go to the public Rekor log by default; if Rekor
+is unavailable they fall back to no-Rekor signing with a warning
+(non-blocking). Offline signature/attestation verification is enforced, the
+optional Rekor-entry check is non-blocking, and the sealed smoke test is
+enforced.
 
 ## CI secrets
 
-The CI job currently uses an ephemeral demo key for every sealed build, so
-forks and PRs can exercise the seal without secrets. For stable published
-signatures, add the db private key as `SECUREBOOT_DB_KEY` and commit the
-matching `keys/db.crt`, then update the key-preparation step to use them.
-The public certificate and enrollment blobs are safe to commit; the private
-key is not.
+- `SECUREBOOT_DB_KEY` — the PEM-encoded db private key used to sign
+  systemd-boot and the UKI. Required to publish sealed images on `main`; must
+  match the committed `keys/db.crt`.
+- `ALLOW_EPHEMERAL_SEAL_KEY` (repository variable, optional) — set to `true`
+  only for a demo fork that intentionally publishes throwaway-key images. Such
+  images cannot be verified or booted without that run's key.
+
+The public certificates and enrollment blobs are safe to commit; the private
+keys are not.
 
 ## Full boot (next)
 
-The CI smoke test proves the install-time seal without KVM. The remaining
-optional finale is booting the sealed disk under OVMF with the demo keys
-enrolled and checking Secure Boot end to end.
+The CI smoke test proves install and the in-place upgrade path without KVM. The
+remaining optional finale is booting the sealed disk under OVMF with the
+committed keys enrolled and checking Secure Boot end to end, including
+auto-enrollment from the `keys/auth/auto/*.auth` blobs.
 
 ## Troubleshooting
 

@@ -16,8 +16,9 @@ Published images are rechunked with [chunkah](https://github.com/coreos/chunkah)
 ## Build locally
 
 The examples build with podman (or docker) and Python 3.9+. `build.py` is the
-single source of truth for the image list, so the same commands run locally and
-in CI. `just` recipes are a convenience wrapper.
+single source of truth for the image list. The GitHub Actions workflow runs
+`./build.py matrix` and fans out from it, so the same table drives local builds
+and CI. `just` recipes are a convenience wrapper.
 
 ```bash
 ./build.py doctor
@@ -26,9 +27,11 @@ in CI. `just` recipes are a convenience wrapper.
 ./build.py shell --image nginx --tag demo
 ```
 
-`./build.py matrix` prints the image matrix as JSON. The GitHub Actions workflow
-still lists its jobs explicitly for now; the matrix is the hand-off point for
-the CI port.
+`./build.py matrix` prints the image matrix as JSON. The GitHub Actions
+workflow runs it with `--compact` and passes each entry to the reusable build
+workflow, including the sealed entry (`nginx` target `sealed`, `SEALED_FROM=nginx`,
+tag `sealed`). Add a new image to `IMAGES` in `build.py` and it joins the
+matrix; no workflow edit is required.
 
 ### Sealed images (demo)
 
@@ -42,24 +45,34 @@ to manage Secure Boot keys:
 ./build.py verify --image nginx-sealed --tag demo
 ```
 
-`keygen --demo` writes `target/keys/` (gitignored). Never commit `db.key`. For
-a Secure Boot VM boot, add `--with-auth` to generate the UEFI enrollment blobs
-as well.
+`keygen --demo` writes `target/keys/` (gitignored). Never commit a `*.key`. For
+a Secure Boot VM boot, add `--with-auth` to generate the UEFI enrollment blobs;
+that also refreshes the committed public `keys/{PK,KEK,db}.crt` so the key
+material stays consistent.
 
-- In CI, add the db private key as `SECUREBOOT_DB_KEY`: a GitHub Actions
-  repository secret, or a masked/protected GitLab CI/CD variable.
-- The public certificate (`keys/db.crt`) and the `.auth` enrollment blobs are
-  safe to commit; the private key is not.
+- Published sealed images require the db private key as `SECUREBOOT_DB_KEY`
+  (GitHub Actions repository secret, or masked/protected GitLab CI/CD variable)
+  and the matching public `keys/db.crt`. CI refuses to publish on `main` with
+  an ephemeral key unless the `ALLOW_EPHEMERAL_SEAL_KEY` repository variable is
+  set to `true`.
+- The public certificates (`keys/PK.crt`, `keys/KEK.crt`, `keys/db.crt`) and
+  the `.auth` enrollment blobs are safe to commit; private keys are not.
 - The default sealed variant is `SEALED_FROM=observability`; the `nginx-sealed`
   entry in `build.py` uses `SEALED_FROM=nginx`.
 
 See [docs/sealed.md](docs/sealed.md) for the chain and the demo runbook.
 
 CI builds the sealed variant directly with `SEALED_FROM=nginx` — one build
-from the content stage, not a base image followed by a separate seal stage —
-and runs a loopback `bootc install` smoke test that fails if the seal does not
-verify. The artifact workflow uses `osbuild/image-builder-action` for disk
-images and ISOs.
+from the content stage, not a base image followed by a separate seal stage.
+On `main` it stages the image under a candidate tag, pulls that exact registry
+digest, installs it, and (when a previous `:sealed` image exists) applies the
+new image over the old installation with `bootc install to-existing-root`.
+Only after those checks pass is `:sealed` updated. The checks assert the UKI
+and systemd-boot signatures against `keys/db.crt`, the embedded
+`composefs.digest`, and the copied `PK/KEK/db.auth` blobs on the ESP. PR builds
+run the same test against the local OCI archive because they are not published.
+The artifact workflow uses `osbuild/image-builder-action` for disk images and
+ISOs.
 
 ### Verify published images
 
@@ -76,7 +89,14 @@ If Rekor was unavailable during a build, the workflow signs with a no-Rekor
 fallback and logs a warning; verify those images with
 `--insecure-ignore-tlog=true`. Sealed images additionally carry a signed UKI
 and a composefs digest covered by fs-verity; [docs/sealed.md](docs/sealed.md)
-describes the full verification chain.
+describes the full verification chain. To verify the Secure Boot signatures
+against the committed key:
+
+```bash
+# Inside the sealed image (or against a mounted ESP)
+sbverify --cert keys/db.crt /boot/EFI/Linux/<kver>.efi
+sbverify --cert keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+```
 
 ## K3S
 This image simply installs k3s on our base image. Meant to be used as either server or agent.
