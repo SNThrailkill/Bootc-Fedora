@@ -93,8 +93,9 @@ for loop in $(sudo losetup -j "${DISK}" | cut -d: -f1); do
     sudo losetup -d "${loop}"
 done
 LOOP="$(sudo losetup -Pf --show "${DISK}")"
-ROOT_PART="$(sudo lsblk -lnpo NAME,FSTYPE "${LOOP}" | awk '$2 ~ /^(ext4|xfs|btrfs)$/ && !found {print $1; found=1}')"
-ESP_PART="$(sudo lsblk -lnpo NAME,FSTYPE "${LOOP}" | awk '$2 == "vfat" && !found {print $1; found=1}')"
+sudo udevadm settle 2>/dev/null || true
+ROOT_PART="$(sudo lsblk -flnpo NAME,FSTYPE "${LOOP}" | awk '$2 ~ /^(ext4|xfs|btrfs)$/ && !found {print $1; found=1}')"
+ESP_PART="$(sudo lsblk -flnpo NAME,FSTYPE "${LOOP}" | awk '$2 == "vfat" && !found {print $1; found=1}')"
 if [ -z "${ROOT_PART}" ] || [ -z "${ESP_PART}" ]; then
     echo "::error::could not identify the root/ESP partitions on ${DISK}"
     sudo lsblk -f "${LOOP}"
