@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """Local build orchestration for the Bootc examples.
 
-Stage 1 (this file): build and inspect the content images locally.
-Stage 2 (next):      seal a content image with a demo Secure Boot key.
+Builds and inspects the content images locally, and provides the keygen, seal
+and verify flow for the sealed variants.
 
 The IMAGES table below is the single source of truth for image names,
-Containerfile targets and the CI matrix. Add new images here; CI can consume
-``./build.py matrix`` instead of hard-coding the list in a workflow.
+Containerfile targets and the CI matrix. Add new images here; both local builds
+and the GitHub Actions workflow use the table (the workflow runs
+``./build.py matrix`` to fan out its jobs).
 
-Sealed variants (stage 2) add ``sealed_from`` and ``requires_keys``. The db
-private key is never committed:
+Sealed variants add ``sealed_from`` and ``requires_keys``. The db private key
+is never committed:
 
 * local demo: generated under ``target/keys/`` (gitignored)
 * GitHub Actions: repository secret ``SECUREBOOT_DB_KEY``
 * GitLab CI: masked/protected CI/CD variable ``SECUREBOOT_DB_KEY``
 
-The public certificate (``keys/db.crt``) and UEFI enrollment blobs are safe to
-commit; the private key is not.
+The public certificates (``keys/PK.crt``, ``keys/KEK.crt``, ``keys/db.crt``)
+and UEFI enrollment blobs are safe to commit; the private keys are not. CI
+refuses to publish a sealed image on the default branch without the repository
+key, unless ``ALLOW_EPHEMERAL_SEAL_KEY=true`` is set as a repository variable.
 
 Usage:
     ./build.py doctor
@@ -55,8 +58,11 @@ class Image:
     containerfile: str = "Containerfile"
     description: str = ""
     ci: bool = True
-    # Reserved for stage 2 (sealed images). The table carries the metadata now
-    # so adding the seal chain does not change the CLI or the CI matrix shape.
+    # Registry image name; defaults to `name`. A sealed variant publishes
+    # under the content image name with its own tag (e.g. nginx:sealed).
+    image_name: Optional[str] = None
+    # Publish only this tag for the image (used by sealed variants).
+    tag_override: Optional[str] = None
     sealed_from: Optional[str] = None
     sealed_target: Optional[str] = None
     requires_keys: bool = False
@@ -100,29 +106,20 @@ IMAGES: Dict[str, Image] = {
         description="CentOS Stream 10 NAS with OpenZFS (kernel-tracked)",
         ci=True,
     ),
-    # Stage 2 demo: seal an existing content stage with a local demo key.
-    # `seal` passes --build-arg SEALED_FROM=<sealed_from> and mounts db.key /
-    # db.crt as podman secrets. Add more entries the same way; CI stays out
-    # until the sealed pipeline is wired.
+    # Sealed demo: seal the nginx content stage with the repository Secure
+    # Boot key hierarchy. CI publishes this as nginx:sealed; the image table
+    # carries the sealed flag and tag override into the CI matrix.
     "nginx-sealed": Image(
         "nginx-sealed",
         "sealed",
-        description="nginx sealed with UKI + composefs + fs-verity (demo keys)",
-        ci=False,
+        description="nginx sealed with UKI + composefs + fs-verity",
+        image_name="nginx",
+        tag_override="sealed",
         sealed_from="nginx",
         sealed_target="sealed",
         requires_keys=True,
     ),
 }
-
-# Stage 2 will add entries like:
-#   "nginx-sealed": Image(
-#       "nginx-sealed", "sealed",
-#       sealed_from="nginx", sealed_target="sealed", requires_keys=True,
-#       description="nginx sealed with UKI + composefs + fs-verity",
-#   ),
-# `seal` will pass --build-arg SEALED_FROM=<sealed_from> and mount the db key
-# and cert as podman secrets.
 
 
 def log(message: str) -> None:
@@ -183,6 +180,16 @@ def require_keys(directory: Path) -> None:
         )
 
 
+def require_cert(directory: Path) -> Path:
+    cert = directory / "db.crt"
+    if not cert.is_file():
+        die(
+            f"missing {cert}; run ./build.py keygen --demo first, or pass "
+            "--key-dir with the certificate that signed the image"
+        )
+    return cert
+
+
 def ensure_image(manager: str, ref: str, image_name: str, build_command: str, tag: str) -> None:
     probe = subprocess.run(
         [manager, "image", "inspect", ref],
@@ -198,15 +205,28 @@ def ensure_image(manager: str, ref: str, image_name: str, build_command: str, ta
 
 def matrix_include() -> List[dict]:
     """The image list CI consumes. Keep this shape stable across forges."""
-    return [
-        {
-            "image": image.name,
-            "containerfile": image.containerfile,
-            "build_target": image.target,
-        }
-        for image in IMAGES.values()
-        if image.ci
-    ]
+    include: List[dict] = []
+    for image in IMAGES.values():
+        if not image.ci:
+            continue
+        sealed = bool(image.requires_keys)
+        include.append(
+            {
+                "image": image.name,
+                "containerfile": image.containerfile,
+                "build_target": image.target,
+                "image_name": image.image_name or image.name,
+                "tag_override": image.tag_override or "",
+                "sealed": sealed,
+                "oci": sealed,
+                "build_args": (
+                    f"SEALED_FROM={image.sealed_from}"
+                    if sealed and image.sealed_from
+                    else ""
+                ),
+            }
+        )
+    return include
 
 
 def run_command(cmd: List[str], dry_run: bool = False) -> int:
@@ -243,24 +263,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     log(
         "/dev/fuse: present"
         if fuse.exists()
-        else "/dev/fuse: missing (needed for sealed images, stage 2)"
+        else "/dev/fuse: missing (needed for sealed images)"
     )
 
     key_dir = DEFAULT_KEY_DIR
     if (key_dir / "db.key").exists():
-        log(f"demo keys: found in {key_dir.relative_to(ROOT)} (keep out of git)")
+        log(f"keys: found in {key_dir.relative_to(ROOT)} (keep out of git)")
     else:
         log(
-            "demo keys: not present; run ./build.py keygen --demo "
+            "keys: not present; run ./build.py keygen --demo "
             f"(writes {key_dir.relative_to(ROOT)})"
         )
 
     log("")
-    log(f"Stage 1 (local content builds): {'ready' if ok else 'not ready'}")
-    stage2 = ok and fuse.exists()
+    log(f"Content builds: {'ready' if ok else 'not ready'}")
+    sealed = ok and fuse.exists()
     log(
-        "Stage 2 (sealed demo): "
-        + ("ready" if stage2 else "not ready")
+        "Sealed images: "
+        + ("ready" if sealed else "not ready")
         + "; run ./build.py keygen --demo, then ./build.py seal --image nginx-sealed"
     )
     return 0 if ok else 1
@@ -397,6 +417,13 @@ def cmd_keygen(args: argparse.Namespace) -> int:
         )
         if code != 0:
             return code
+        # Keep the committed public certificates in sync with the enrollment
+        # blobs so CI can verify the same key hierarchy that signed the image.
+        if not args.dry_run:
+            for name in ("PK", "KEK", "db"):
+                shutil.copyfile(
+                    directory / f"{name}.crt", ROOT / "keys" / f"{name}.crt"
+                )
 
     if not args.dry_run:
         log(f"demo keys in {directory} (never commit *.key)")
@@ -405,6 +432,11 @@ def cmd_keygen(args: argparse.Namespace) -> int:
             log(
                 "no enrollment blobs generated; pass --with-auth before a "
                 "Secure Boot VM boot"
+            )
+        else:
+            log(
+                "updated keys/{PK,KEK,db}.crt and keys/auth/auto/*.auth; "
+                "commit the public material and set SECUREBOOT_DB_KEY from db.key"
             )
     return 0
 
@@ -479,27 +511,48 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if not args.dry_run:
         ensure_image(manager, ref, image.name, "seal", args.tag)
 
+    directory = resolve_key_dir(args.key_dir)
+    if not args.dry_run:
+        require_cert(directory)
+
     script = r"""
 set -eux
 kver=$(ls /usr/lib/modules)
 ls -lh /boot/EFI/Linux/
+# --list is diagnostic; --cert is the enforced check that the expected key
+# actually signed the image.
 sbverify --list "/boot/EFI/Linux/${kver}.efi"
+sbverify --cert /keys/db.crt "/boot/EFI/Linux/${kver}.efi"
 sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+sbverify --cert /keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
 objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
+strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
+for f in PK KEK db; do
+    test -s "/usr/lib/bootc/install/secureboot-keys/auto/${f}.auth"
+done
 bootc --version
 rpm -q bootc
 test -f /usr/lib/bootc/install/00-ext4-default.toml
 test -f /usr/lib/composefs/setup-root-conf.toml
 """.strip()
 
-    return run_command(
-        [manager, "run", "--rm", "--entrypoint", "/bin/bash", ref, "-c", script],
-        args.dry_run,
-    )
+    cmd = [manager, "run", "--rm"]
+    if not args.dry_run:
+        # The key directory is read-only input to the verification container.
+        cmd += [
+            "--security-opt=label=disable",
+            "-v",
+            f"{directory}:/keys:ro",
+        ]
+    cmd += ["--entrypoint", "/bin/bash", ref, "-c", script]
+    return run_command(cmd, args.dry_run)
 
 
 def cmd_matrix(args: argparse.Namespace) -> int:
-    print(json.dumps({"include": matrix_include()}, indent=2))
+    if args.compact:
+        print(json.dumps({"include": matrix_include()}, separators=(",", ":")))
+    else:
+        print(json.dumps({"include": matrix_include()}, indent=2))
     return 0
 
 
@@ -564,11 +617,17 @@ def build_parser() -> argparse.ArgumentParser:
     verify = sub.add_parser("verify", help="inspect a sealed image's UKI and config")
     verify.add_argument("--image", default="nginx-sealed", choices=sorted(IMAGES))
     verify.add_argument("--tag", default=DEFAULT_TAG)
+    verify.add_argument("--key-dir", help="key directory (default: target/keys)")
     verify.add_argument("--container-mgr", choices=("podman", "docker", "buildah"))
     verify.add_argument("--dry-run", action="store_true")
     verify.set_defaults(func=cmd_verify)
 
     matrix = sub.add_parser("matrix", help="print the CI image matrix as JSON")
+    matrix.add_argument(
+        "--compact",
+        action="store_true",
+        help="single-line JSON for CI matrix outputs",
+    )
     matrix.set_defaults(func=cmd_matrix)
 
     return parser

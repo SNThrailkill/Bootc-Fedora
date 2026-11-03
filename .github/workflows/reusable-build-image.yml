@@ -74,14 +74,62 @@ jobs:
           echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> $GITHUB_OUTPUT
 
       # The sealed chain signs systemd-boot and the UKI inside the build via
-      # --mount=type=secret. CI uses an ephemeral demo key so the seal flow is
-      # exercised on every build. For stable published signatures, provide
-      # SECUREBOOT_DB_KEY and a matching committed keys/db.crt instead.
-      - name: Prepare demo Secure Boot key
+      # --mount=type=secret. Published images must use the repository key:
+      # SECUREBOOT_DB_KEY (private) plus the committed keys/db.crt (public).
+      # PR builds fall back to an ephemeral demo key because they are not
+      # published; publishing with an ephemeral key requires an explicit
+      # ALLOW_EPHEMERAL_SEAL_KEY repository variable.
+      - name: Prepare Secure Boot key
+        id: secureboot
         if: inputs.sealed
+        env:
+          SECUREBOOT_DB_KEY: ${{ secrets.SECUREBOOT_DB_KEY }}
+          ALLOW_EPHEMERAL_SEAL_KEY: ${{ vars.ALLOW_EPHEMERAL_SEAL_KEY }}
+          PUBLISHING: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         run: |
           set -euo pipefail
-          ./build.py keygen --demo --key-dir "$RUNNER_TEMP/sealed-keys"
+          key_dir="$RUNNER_TEMP/sealed-keys"
+          mkdir -p "$key_dir"
+          chmod 700 "$key_dir"
+
+          if [ -n "${SECUREBOOT_DB_KEY:-}" ]; then
+            printf '%s\n' "$SECUREBOOT_DB_KEY" > "$key_dir/db.key"
+            chmod 600 "$key_dir/db.key"
+            if [ ! -s keys/db.crt ]; then
+              echo "::error::SECUREBOOT_DB_KEY is set but keys/db.crt is missing"
+              exit 1
+            fi
+            cp keys/db.crt "$key_dir/db.crt"
+
+            key_pub="$(openssl pkey -in "$key_dir/db.key" -pubout -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+            cert_pub="$(openssl x509 -in "$key_dir/db.crt" -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+            if [ -z "$key_pub" ] || [ "$key_pub" != "$cert_pub" ]; then
+              echo "::error::SECUREBOOT_DB_KEY does not match keys/db.crt"
+              exit 1
+            fi
+            echo "source=secret" >> "$GITHUB_OUTPUT"
+            echo "::notice::Using the repository Secure Boot db key from SECUREBOOT_DB_KEY"
+          elif [ "$PUBLISHING" = "true" ] && [ "${ALLOW_EPHEMERAL_SEAL_KEY:-}" != "true" ]; then
+            echo "::error::Refusing to publish a sealed image signed by a throwaway key. Set SECUREBOOT_DB_KEY and commit keys/db.crt, or set the ALLOW_EPHEMERAL_SEAL_KEY repository variable for demo-only images."
+            exit 1
+          else
+            ./build.py keygen --demo --key-dir "$key_dir"
+            echo "source=ephemeral" >> "$GITHUB_OUTPUT"
+            if [ "$PUBLISHING" = "true" ]; then
+              echo "::warning::Publishing a sealed image with an ephemeral key because ALLOW_EPHEMERAL_SEAL_KEY=true; it cannot be verified or booted without this run's key."
+            else
+              echo "::notice::Using an ephemeral demo Secure Boot key; PR builds are not published."
+            fi
+          fi
+
+          test -s "$key_dir/db.key"
+          test -s "$key_dir/db.crt"
+          for f in PK KEK db; do
+            test -s "keys/auth/auto/${f}.auth" || {
+              echo "::error::missing public enrollment blob keys/auth/auto/${f}.auth"
+              exit 1
+            }
+          done
 
       - name: Compute image tags
         id: imagetags
@@ -222,50 +270,6 @@ jobs:
           buildah push "${IMAGE_NAME}:${{ steps.imagetags.outputs.primary }}" \
             "oci-archive:${RUNNER_TEMP}/image.tar"
 
-      # Sealed-only: prove the build-time composefs digest is reproducible at
-      # install time without KVM. bootc only stages a deployment when every
-      # digest baked into the signed UKI matches the EROFS image it generates
-      # from the pulled layers, so a successful --via-loopback install is the
-      # end-to-end seal check. This step is deliberately not continue-on-error:
-      # a failed seal fails the pipeline.
-      - name: Sealed install smoke test (loopback)
-        if: inputs.sealed
-        run: |
-          set -euo pipefail
-          LOADED=$(sudo podman load -i "$RUNNER_TEMP/image.tar")
-          echo "$LOADED"
-          IMG=$(echo "$LOADED" | sed -n 's/^Loaded image: //p' | awk '{print $1}')
-          [ -n "$IMG" ] || IMG=$(sudo podman images -q --no-trunc | head -1)
-          RUN_REF="localhost/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}"
-          sudo podman tag "$IMG" "$RUN_REF"
-          sudo podman image inspect "$RUN_REF" >/dev/null
-          mkdir -p "$RUNNER_TEMP/sealed-test"
-          truncate -s 12G "$RUNNER_TEMP/sealed-test/disk.img"
-          sudo podman run --rm --privileged --pid=host --ipc=host \
-            -v /dev:/dev \
-            -v /var/lib/containers:/var/lib/containers \
-            -v "$RUNNER_TEMP/sealed-test:/output" \
-            "$RUN_REF" \
-            bootc install to-disk --generic-image --wipe --via-loopback \
-              --target-imgref "${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}" \
-              /output/disk.img
-          echo "::notice::Sealed install smoke test passed - UKI digest matches the generated EROFS image"
-
-      - name: Verify sealed UKI signatures
-        if: inputs.sealed
-        run: |
-          set -euo pipefail
-          RUN_REF="localhost/${{ steps.image_case.outputs.lowercase }}:${{ steps.imagetags.outputs.primary }}"
-          sudo podman run --rm --entrypoint /bin/bash "$RUN_REF" -c '
-            set -eux
-            kver=$(ls /usr/lib/modules)
-            sbverify --list "/boot/EFI/Linux/${kver}.efi"
-            sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
-            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
-            strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
-          '
-          echo "::notice::Sealed UKI and systemd-boot signatures verified"
-
       - name: Setup Syft
         id: setup-syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
@@ -274,21 +278,41 @@ jobs:
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        if: github.event_name != 'pull_request' || inputs.sealed
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Pull previous sealed image
+        id: previous
+        if: inputs.sealed
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          TAG: ${{ steps.imagetags.outputs.primary }}
+        run: |
+          set -euo pipefail
+          # The tag still points at the previously published image here; the
+          # new build is only pushed to the staging tag below. Capture the
+          # image ID now so the upgrade test starts from the old deployment.
+          if sudo podman pull --authfile "$HOME/.docker/config.json" "${IMAGE}:${TAG}" >/dev/null 2>&1; then
+            image_id="$(sudo podman image inspect --format '{{.Id}}' "${IMAGE}:${TAG}")"
+            prev_ref="localhost/sealed-previous:${image_id#sha256:}"
+            sudo podman tag "${IMAGE}:${TAG}" "$prev_ref"
+            echo "ref=$prev_ref" >> "$GITHUB_OUTPUT"
+            echo "::notice::Upgrade smoke test will start from ${IMAGE}:${TAG} (${image_id})"
+          else
+            echo "ref=" >> "$GITHUB_OUTPUT"
+            echo "::notice::No previous ${IMAGE}:${TAG}; running install-only smoke test"
+          fi
 
       - name: Generate SBOM
         id: generate-sbom
         run: |
           set -euo pipefail
           if [ "${{ inputs.sealed }}" = "true" ]; then
-            # Scan the exact sealed OCI archive that the smoke test installed.
+            # Scan the exact sealed OCI archive that the smoke test loads.
             syft scan "oci-archive:${RUNNER_TEMP}/image.tar" -o "spdx-json=sbom.json"
-            rm -f "${RUNNER_TEMP}/image.tar"
           else
             # Scan the chunkah OCI layout, not the registry's previous image.
             # The pushed image is imported from this layout.
@@ -366,6 +390,97 @@ jobs:
         with:
           sarif_file: sarif-filtered.json
 
+      # Stage the sealed image under a non-public tag, then test that exact
+      # registry digest. The :sealed tag is only updated after the smoke test
+      # passes, so a broken seal cannot replace the last good published image.
+      - name: Tag sealed candidate
+        if: inputs.sealed && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          buildah tag "${IMAGE_NAME}:${{ steps.imagetags.outputs.primary }}" "${IMAGE_NAME}:sealed-candidate"
+
+      - name: Push sealed candidate
+        id: push-candidate
+        if: inputs.sealed && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3.0.0
+        with:
+          registry: ${{ steps.registry_case.outputs.lowercase }}
+          image: ${{ steps.image_case.outputs.lowercase }}
+          tags: sealed-candidate
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare sealed smoke-test image
+        id: smoke-image
+        if: inputs.sealed
+        env:
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          TAG: ${{ steps.imagetags.outputs.primary }}
+          CANDIDATE_DIGEST: ${{ steps.push-candidate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CANDIDATE_DIGEST:-}" ]; then
+            # Main: pull the staged registry digest, not the local build.
+            sudo podman pull --authfile "$HOME/.docker/config.json" \
+              "${IMAGE}@${CANDIDATE_DIGEST}"
+            image_id="$(sudo podman image inspect --format '{{.Id}}' "${IMAGE}@${CANDIDATE_DIGEST}")"
+            current_ref="localhost/sealed-current:${image_id#sha256:}"
+            sudo podman tag "$image_id" "$current_ref"
+          else
+            # PR: nothing is published, so test the archive this job built.
+            loaded="$(sudo podman load -i "$RUNNER_TEMP/image.tar")"
+            echo "$loaded"
+            loaded_ref="$(echo "$loaded" | sed -n 's/^Loaded image: //p' | head -1 | awk '{print $1}')"
+            [ -n "$loaded_ref" ] || loaded_ref="$(sudo podman images -q --no-trunc | head -1)"
+            image_id="$(sudo podman image inspect --format '{{.Id}}' "$loaded_ref")"
+            current_ref="localhost/sealed-current:${image_id#sha256:}"
+            sudo podman tag "$loaded_ref" "$current_ref"
+          fi
+          sudo podman image inspect "$current_ref" >/dev/null
+          echo "ref=$current_ref" >> "$GITHUB_OUTPUT"
+          rm -f "$RUNNER_TEMP/image.tar"
+
+      - name: Verify sealed UKI signatures
+        if: inputs.sealed
+        env:
+          RUN_REF: ${{ steps.smoke-image.outputs.ref }}
+          KEY_DIR: ${{ runner.temp }}/sealed-keys
+        run: |
+          set -euo pipefail
+          sudo podman run --rm --entrypoint /bin/bash \
+            -v "$KEY_DIR:/keys:ro" \
+            "$RUN_REF" -c '
+            set -eux
+            kver=$(ls /usr/lib/modules)
+            # --list is diagnostic; --cert is the enforced expected-key check.
+            sbverify --list "/boot/EFI/Linux/${kver}.efi"
+            sbverify --cert /keys/db.crt "/boot/EFI/Linux/${kver}.efi"
+            sbverify --list /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+            sbverify --cert /keys/db.crt /usr/lib/systemd/boot/efi/systemd-bootx64.efi
+            objdump -s -j .cmdline "/boot/EFI/Linux/${kver}.efi"
+            strings -a "/boot/EFI/Linux/${kver}.efi" | grep -q "composefs.digest"
+            for f in PK KEK db; do
+              test -s "/usr/lib/bootc/install/secureboot-keys/auto/${f}.auth"
+            done
+          '
+          echo "::notice::Sealed UKI and systemd-boot signatures verified against the expected db certificate"
+
+      # On main, install and upgrade the exact registry digest staged above;
+      # on PRs, use the local OCI archive because nothing is published. The
+      # install fails unless every digest baked into the signed UKI matches
+      # the EROFS image bootc generates from the pulled layers. The script
+      # also starts from the previous :sealed image when it exists, so the
+      # second phase exercises the in-place upgrade path.
+      - name: Sealed install and upgrade smoke test
+        if: inputs.sealed
+        env:
+          CURRENT_REF: ${{ steps.smoke-image.outputs.ref }}
+          PREVIOUS_REF: ${{ steps.previous.outputs.ref }}
+          IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
+          TAG: ${{ steps.imagetags.outputs.primary }}
+          KEY_DIR: ${{ runner.temp }}/sealed-keys
+          WORK_DIR: ${{ runner.temp }}/sealed-test
+        run: ./.github/scripts/sealed-smoke-test.sh
+
       - name: Push To GHCR
         uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3.0.0
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
@@ -376,7 +491,18 @@ jobs:
           tags: ${{ steps.metadata.outputs.tags }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
+      - name: Confirm the tested digest was published
+        if: inputs.sealed && github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          TESTED: ${{ steps.push-candidate.outputs.digest }}
+          PUBLISHED: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$TESTED"
+          test "$TESTED" = "$PUBLISHED"
+          echo "::notice::Tested and published digest: $PUBLISHED"
+
       # This section is optional and only needs to be enabled if you plan on distributing
       # your project for others to consume. You will need to create a public and private key
       # using Cosign and save the private key as a repository secret in Github for this workflow
