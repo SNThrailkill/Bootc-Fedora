@@ -524,13 +524,24 @@ jobs:
           DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_EXPERIMENTAL: false
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_TIMEOUT: 2m0s
         run: |
+          set -euo pipefail
           # Sign the pushed digest, not the mutable tag, so the signature is
-          # attached to exactly the chunked image this run produced.
-          cosign sign -y \
-            --signing-config .github/cosign/signing-config-rekor.json \
-            --key env://COSIGN_PRIVATE_KEY \
-            "${IMAGE}@${DIGEST}"
+          # attached to exactly the chunked image this run produced. Rekor can
+          # reject a POST transiently, so retry before using the no-Rekor
+          # fallback.
+          for attempt in 1 2 3; do
+            if cosign sign -y \
+              --signing-config .github/cosign/signing-config-rekor.json \
+              --key env://COSIGN_PRIVATE_KEY \
+              "${IMAGE}@${DIGEST}"; then
+              exit 0
+            fi
+            echo "::warning::Rekor sign attempt ${attempt}/3 failed"
+            sleep 15
+          done
+          exit 1
 
       - name: Sign container image (no Rekor fallback)
         id: sign-fallback
@@ -555,14 +566,22 @@ jobs:
           IMAGE: ${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}
           DIGEST: ${{ steps.push.outputs.digest }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-          COSIGN_TIMEOUT: 5m0s
+          COSIGN_TIMEOUT: 2m0s
         run: |
-          cosign attest -y \
-            --signing-config .github/cosign/signing-config-rekor.json \
-            --predicate ./sbom.json \
-            --type spdxjson \
-            --key env://COSIGN_PRIVATE_KEY \
-            "${IMAGE}@${DIGEST}"
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if cosign attest -y \
+              --signing-config .github/cosign/signing-config-rekor.json \
+              --predicate ./sbom.json \
+              --type spdxjson \
+              --key env://COSIGN_PRIVATE_KEY \
+              "${IMAGE}@${DIGEST}"; then
+              exit 0
+            fi
+            echo "::warning::Rekor attestation attempt ${attempt}/3 failed"
+            sleep 15
+          done
+          exit 1
 
       - name: Attest SBOM (no Rekor fallback)
         id: attest-fallback
