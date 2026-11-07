@@ -1,0 +1,49 @@
+---
+# GitHub is the source of truth. This workflow mirrors branches and tags to
+# the read-only GitLab copy at SNThrailkill/bootc-fedora.
+#
+# GitLab pull mirroring is Premium-only and this group is on the Free plan, so
+# the push has to originate here. CI/CD is disabled on the GitLab project: the
+# mirror stores code, it never builds images.
+name: Mirror to GitLab
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-to-gitlab
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Push branches and tags to GitLab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLAB_MIRROR_SSH_KEY: ${{ secrets.GITLAB_MIRROR_SSH_KEY }}
+          GITLAB_REPOSITORY: SNThrailkill/bootc-fedora
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$GITLAB_MIRROR_SSH_KEY" > "$HOME/.ssh/gitlab_mirror"
+          chmod 600 "$HOME/.ssh/gitlab_mirror"
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/gitlab_mirror -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+          workdir="$(mktemp -d)"
+          git init --quiet --bare "$workdir/mirror.git"
+          cd "$workdir/mirror.git"
+          git remote add github "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config remote.github.fetch '+refs/heads/*:refs/heads/*'
+          git config --add remote.github.fetch '+refs/tags/*:refs/tags/*'
+          git fetch --quiet --prune --force github
+          git remote add gitlab "git@gitlab.com:${GITLAB_REPOSITORY}.git"
+          git push --quiet --mirror gitlab
